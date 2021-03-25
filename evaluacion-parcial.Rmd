@@ -1,0 +1,212 @@
+---
+title: "Examen parcial - Primavera 2021"
+author: Alfredo Garbuno Iñigo
+output: html_document
+---
+
+**Entrega:** 
+
+Enviar por correo electrónico una carpeta comprimida
+(`equipo-xx.zip`) que incluya datos y codigo de solución a mas tardar el 30 de
+Marzo antes de las 11:59pm (medianoche). El asunto deberá ser `[MB - 2021]
+Parcial Equipo XX`, donde  reemplazarás `XX` con el codigo de tu equipo. No se
+aceptarán entregas extemporáneas. Será mejor entregar un examen resuelto
+parcialmente, que no entregar nada.
+
+**Instrucciones:**
+  
+* Tus respuestas deben ser claras y debes explicar los resultados, incluye
+también tus procedimientos/código de manera ordenada, y el código comentado.
+
+* Se evaluará la presentación de resultados (calidad de las gráficas, tablas,
+...).
+
+* Las sesiones de dudas del Miércoles 24 de Marzo será completamente para
+responder dudas del examen. Adicionalmente, en las sesiones del Martes 23 y
+Jueves 25 se reservará una media hora para dudas (dependerá de la agenda cuál
+será el momento mas oportuno para abrir el espacio).
+
+* No pueden compartir soluciones entre diferentes equipos.
+
+* Al entregar este examen afirmas que el trabajo se realizó sólo con tu
+compañeros de equipo. El material que utilizaste para apoyarte consistió de las
+notas en clase (pdfs en Canvas), el codigo fuente de las notas en el repositorio
+de Github.
+
+* Al entregar estás dando tu consentimiento para que bajo sospecha y suficiente
+evidencia de copia se anule tu evaluación.
+
+**Ponderación:**
+
+El examen está compuesto por tres apartados cuyo peso son los siguientes: 
+1. Datos !Kung San (60%)
+2. Datos Vinos     (25%)
+3. Datos Nettle    (15%)
+
+
+```{r setup, include=FALSE}
+
+library(tidymodels)
+library(tidyverse)
+library(cmdstanr)
+library(rstanarm)
+library(bayesplot)
+library(loo)
+
+library(patchwork)
+library(scales)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE, 
+                      fig.align = 'center', fig.width = 5, fig.height=3, cache = TRUE)
+comma <- function(x) format(x, digits = 2, big.mark = ",")
+theme_set(theme_linedraw())
+```
+
+## Datos: !Kung San.
+
+Los datos que que tenemos en `Howell.txt` son datos parciales del censo para el
+área de Dobe, en particular para la población de los [!Kung
+San.](https://es.wikipedia.org/wiki/!Kung) Éstos fueron recopilados a partir de
+entrevistas realizadas por Nancy Howell a finales de la década de 1960.
+
+a ) Los pesos presentados a continuación se registraron en el censo !Kung, pero no
+se registraron las alturas para estas personas. Proporciona predicciones para
+las alturas e intervalos del 89% para cada uno de estos individuos basados en un
+modelo de regresión lineal.
+
+```{r}
+
+tibble(weight = c(46.95, 43.72, 64.78, 32.59, 54.63))
+
+```
+b) Ajusta un modelo lineal para personas menores de 18 años de edad utilizando
+como predictores la `edad` y el `peso`. Interpreta los coeficientes que resultan
+del modelo. Si consideras necesario centra los valores de las variable
+predictoras.
+
+c) Para el modelo resultante, haz gráficos que muestren la relación de la
+variable objetivo con los predictores. De igual forma, incorpora en la
+visualización la respuesta del modelo lineal junto con intervalos de predicción
+al 89\% y 97\%, de tal forma que incorpores la incertidumbre que se ha
+cuantificado en tu gráfico.
+
+d) Supongamos que tenemos una amiga que es experta en
+[alometría](https://es.wikipedia.org/wiki/Alometr%C3%ADa) y les menciona que el
+peso es suficiente, pero que se debería de incorporar en términos de una escala
+logarítmica. Ajusta el modelo con todos las observaciones y compara con el
+modelo del inciso a) y un modelo adicional que sólo incorpora el `peso`. ¿Cuál
+parece tener mejor capacidad predictiva?
+
+e) ¿Cómo interpretas los coeficientes del mejor modelo del inciso `d`?
+
+f) Ahora estudiaremos el efecto de la distribución previa. Para esto
+consideraremos. La variable de `edad` centrada y probaremos distintos polinomios
+como predictores. Consideraremos potencias desde 0 hasta términos de grado 6.
+Ajusta esta colección de posibles modelos. 
+
+g) Para cada modelo en el inciso de arriba, genera graficos que muestren las
+predicciones junto con las bandas de predicción. 
+
+h) Realiza una evaluación de los modelos resultantes con el criterio de
+información que consideres más apropiado.
+
+i) Ahora ajustaremos un polinomio de grado 6 pero incorporaremos distribuciones
+previas mas restrictivas. Es decir, considera que $\beta_k \sim \mathsf{N}(0,
+\sqrt{5})$ para toda $k.$ Nota que la desviación estandar es $\sqrt{5}.$ Evalúa
+el criterio de información que utlizaste en el inciso anterior, y compara la
+estimación de número efectivo de parámetros. ¿Por qué crees que sucede esto?
+
+## Datos: Vinos.
+
+Consideremos el conjunto de datos en `vinos.txt`. Estos datos son evaluaciones
+de 20 vinos diferentes, tanto franceses y estadounidenses, realizadas por 9
+jueces (también, franceses y estadounidenses) diferentes. El objetivo de este
+ejercicio es modelar el `score`, la calificación subjetiva que cada juez asigna
+a cada vino. Recomiendo centrarlo para el ajuste de los modelos.
+
+a) En este inciso, sólo considera la variación entre jueces y
+vinos. Ajusta un modelo de regresión lineal utilizando estos predictores.
+Justifica tu distribución _a priori_. ¿Cómo interpretas la variación entre
+jueces individuales y vinos individuales? ¿Notas algún patrón (puedes utilizar
+`mcmc_areas`)? ¿Qué jueces dieron las calificaciones más altas / más bajas? ¿Qué
+vinos fueron calificados como peores / mejores en promedio?
+
+
+b) Ajusta con la previa _default_ en `stan_glm`. Después, ajusta de nuevo el
+modelo con una distribución a priori regularizada (incorpora `prior = hs()` en
+las opciones). ¿Que observas al comparar la $R^2$-Bayesiana de ambos modelos?
+¿Cómo explicas éste comportamiento? Por otro lado, calcula la capacidad
+predictiva por medio de `loo` o `waic` (el que tu elijas) en ambos y describe lo
+que observas en el estadistico que describe el número efectivo de parámetros.
+¿Cómo justificas este comportamiento? ¿Cómo concilias lo observado en la $R^2_B$
+y la comparación de devianza entre ambas posibilidades?
+
+
+c) Ahora considera como predictores `flight`(el tipo de vino), `wine.amer` (de
+dónde proviene), y `judge.amer` (indicador si el juez es americano). Para este
+inciso no incluyas las variables de los casos anteriores. De igual manera,
+justifica la selección de distribución previa que utilizas. ¿Cómo se relacionan
+estas estimaciones con lo que observaste en el inciso `a`?
+
+d) Ahora considera todas las posibles interacciones de dos términos con las tres
+variables de arriba. Explica lo que significa cada término e interpreta los
+coeficientes. ¿Cómo se relacionan estos resultados con los del inciso `a` de
+esta sección?
+
+
+### Datos: 
+
+Utiliza los datos en `nettle.txt` para evaluar la hipótesis de que la diversidad
+lingüística es producto de la seguridad alimentaria. Los datos contienen mediciones para: 
+
+1) `country`: Nombre del país.
+2) `num.lang`: Número de lenguajes identificados en dicho país.
+3) `area`: Area medida en kilómetros cuadrados.
+4) `k.pop`: Población en miles. 
+5) `num.stations`: Número de estaciones que proveen las siguientes. 
+6) `mean.growing.season`: Duración promedio de la temporada de cosecha, medida
+en meses. 
+7) `sd.growing.season`: Desviación estándar de la duración de la
+temporada de cosecha, medidad en meses.
+
+La idea es que, en las ecologías productivas, las personas no necesitan grandes
+redes sociales para protegerse contra el riesgo de escasez de alimentos. Esto
+significa que los grupos culturales pueden ser más pequeños y más
+autosuficientes, lo que lleva a más idiomas per cápita. Utiliza el número de
+idiomas per cápita como resultado:
+
+```{r, eval = FALSE}
+
+data %>% 
+    mutate(leng.per.cap = num.leng/k.pob)
+
+```
+
+Utilice el logaritmo de esta nueva variable como el objetivo de un modelo de
+regresión. Este problema tiene un final abierto, lo que les permite decidir cómo
+abordar las hipótesis y las predicciones inciertas que proporciona el modelo. Si
+creen que necesita usar WAIC/LOO en cualquier momento, hágamlo. Si creen que necesitan
+cierta distribución previa, argumenten por ella. Si creen que necesitan mostrar
+las predicciones de cierta manera, háganlo. Traten de evaluar honestamente
+los efectos principales de la temporada media de crecimiento
+(`mean.growing.season`) y la desviación de la temporada de crecimiento
+(`sd.growing.season`), así como su interacción.
+
+a) Evalúe la hipótesis de que la diversidad lingüística, medida por
+`log(lang.per.cap)`, está asociada positivamente con la duración promedio de la
+temporada de crecimiento, `mean.growing.season`. Considera tambíen  `log(area)`
+en tu modelo (no como una interacción). Interpreten sus resultados.
+
+b) Ahora evalúen la hipótesis de que la diversidad lingüística está asociada
+negativamente con la desviación estándar de la duración de la temporada de
+crecimiento. Esta hipótesis se deriva de la incertidumbre en la cosecha que
+favorece la seguridad social a través de redes sociales más amplias y, por lo
+tanto, menos idiomas. Nuevamente, considere `log(area)` como una covariable (no
+una interacción). Interpreten sus resultados.
+
+c) Finalmente, evalúen la hipótesis de que `mean.growing.season` y
+`sd.growing.season` interactúan para reducir sinérgicamente la diversidad del
+lenguaje. La idea es que, en naciones con temporadas de cultivo en promedio más
+largas, la alta variación hace que el almacenamiento y la redistribución sean
+aún más importantes de lo que serían de otra manera. De esa manera, las personas
+pueden cooperar para preservar y proteger las ganancias inesperadas que se
+utilizarán durante las sequías.
