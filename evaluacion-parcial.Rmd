@@ -7,7 +7,7 @@ output: html_document
 **Entrega:** 
 
 Enviar por correo electrónico una carpeta comprimida
-(`equipo-xx.zip`) que incluya datos y codigo de solución a mas tardar el 30 de
+(`equipo-xx.zip`) que incluya datos y codigo de solución a mas tardar el 23 de
 Marzo antes de las 11:59pm (medianoche). El asunto deberá ser `[MB - 2021]
 Parcial Equipo XX`, donde  reemplazarás `XX` con el codigo de tu equipo. No se
 aceptarán entregas extemporáneas. Será mejor entregar un examen resuelto
@@ -21,10 +21,10 @@ también tus procedimientos/código de manera ordenada, y el código comentado.
 * Se evaluará la presentación de resultados (calidad de las gráficas, tablas,
 ...).
 
-* Las sesiones de dudas del Miércoles 24 de Marzo será completamente para
-responder dudas del examen. Adicionalmente, en las sesiones del Martes 23 y
-Jueves 25 se reservará una media hora para dudas (dependerá de la agenda cuál
-será el momento mas oportuno para abrir el espacio).
+* Las sesiones de dudas del Miércoles 17 de Marzo será completamente para
+responder dudas del examen. Adicionalmente, en las sesiones del Martes 16 y
+Jueves 18 se reservará una media hora para dudas (dependerá de la agenda cuál
+será el momento más oportuno para abrir el espacio).
 
 * No pueden compartir soluciones entre diferentes equipos.
 
@@ -45,14 +45,12 @@ El examen está compuesto por tres apartados cuyo peso son los siguientes:
 
 
 ```{r setup, include=FALSE}
-
 library(tidymodels)
 library(tidyverse)
 library(cmdstanr)
 library(rstanarm)
 library(bayesplot)
 library(loo)
-
 library(patchwork)
 library(scales)
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE, 
@@ -63,7 +61,7 @@ theme_set(theme_linedraw())
 
 ## Datos: !Kung San.
 
-Los datos que que tenemos en `Howell.txt` son datos parciales del censo para el
+Los datos que tenemos en `Howell.csv` son datos parciales del censo para el
 área de Dobe, en particular para la población de los [!Kung
 San.](https://es.wikipedia.org/wiki/!Kung) Éstos fueron recopilados a partir de
 entrevistas realizadas por Nancy Howell a finales de la década de 1960.
@@ -74,20 +72,132 @@ las alturas e intervalos del 89% para cada uno de estos individuos basados en un
 modelo de regresión lineal.
 
 ```{r}
-
-tibble(weight = c(46.95, 43.72, 64.78, 32.59, 54.63))
-
+peso<-tibble(peso = c(46.95, 43.72, 64.78, 32.59, 54.63))
+peso
 ```
+
+
+```{r}
+datos1<-read_delim("howell.csv", delim = ";" ) #Cargamos los datos
+```
+
+```{r}
+howell<-datos1
+howell$genero<-factor(howell$genero)
+glimpse(howell)
+```
+
+
+```{r}
+#altura en cm
+#eso en kg
+#edad en años
+#indicador si es hombre
+summary(howell)
+```
+
+```{r}
+m_1a <- lm(altura ~ peso, howell)
+summary(m_1a)
+```
+
+```{r}
+m_1a <- stan_glm(altura ~ peso, data = howell, refresh = 0)
+#prior_summary(m_1a)
+summary(m_1a)
+```
+
+
+### Predicciones usando `stan_glm`
+
+```{r }
+new <- data.frame(peso)
+y_point_pred <- predict(m_1a, newdata=new)
+y_point_pred
+```
+
+```{r }
+y_linpred <- posterior_linpred(m_1a, newdata=new)
+summary(y_linpred)
+```
+
+```{r }
+y_pred <- posterior_predict(m_1a, newdata=new)
+summary(y_pred)
+```
+
+Para poder dar una interpretación más sencilla al modelo lineal para predecir la altura, estandarizaremos las variables numéricas centrando al rededor de su media:
+
+```{r, eval = FALSE}
+howell<-howell %>% 
+  mutate(peso.centrado = peso-mean(peso))
+howell
+```
+
+Una persona promedio con peso y edad promedio tendría una altura de 138 cm, cuando la persona tiene un punto adicional sobre el peso promedio, la altura aumenta 1.76cm.
+
+```{r}
+m_1a <- lm(altura ~ peso.centrado, howell)
+summary(m_1a)
+```
+
+```{r}
+m_1a$coefficients
+```
+
+Las predicciones para las alturas son:
+
+```{r}
+alturas<-m_1a$coefficients[1]+(pesos-mean(howell$peso))*m_1a$coefficients[2]
+names(alturas)[1] <- "predicciones_altura"
+alturas
+```
+
 b) Ajusta un modelo lineal para personas menores de 18 años de edad utilizando
 como predictores la `edad` y el `peso`. Interpreta los coeficientes que resultan
-del modelo. Si consideras necesario centra los valores de las variable
+del modelo. Si consideras necesario centra los valores de las variables
 predictoras.
+
+```{r}
+menores_edad<-datos1 %>% filter(edad < 18)
+menores_edad
+```
+Para poder dar una interpretación más sencilla al modelo lineal para predecir la altura, centraremos las variables numéricas centrando al rededor de su media:
+
+```{r, eval = FALSE}
+menores_edad<-menores_edad %>% 
+  mutate(peso.centrado = peso-mean(peso),
+         edad.centrado = edad-mean(edad))
+menores_edad
+```
+```{r}
+m_1b <- lm(altura ~ peso.centrado+ edad.centrado, menores_edad)
+summary(m_1b)
+```
+
+```{r}
+m_1b <- stan_glm(altura ~ peso.centrado+ edad.centrado, data = menores_edad, refresh = 0)
+#prior_summary(m_2a)
+summary(m_1b)
+```
 
 c) Para el modelo resultante, haz gráficos que muestren la relación de la
 variable objetivo con los predictores. De igual forma, incorpora en la
 visualización la respuesta del modelo lineal junto con intervalos de predicción
 al 89\% y 97\%, de tal forma que incorpores la incertidumbre que se ha
 cuantificado en tu gráfico.
+
+```{r}
+menores_edad %>%
+  ggplot(aes(x=peso.centrado,y=altura)) +
+  geom_point()
+```
+```{r}
+menores_edad %>%
+  ggplot(aes(x=edad.centrado,y=altura)) +
+  geom_point()
+```
+
 
 d) Supongamos que tenemos una amiga que es experta en
 [alometría](https://es.wikipedia.org/wiki/Alometr%C3%ADa) y les menciona que el
@@ -96,24 +206,47 @@ logarítmica. Ajusta el modelo con todos las observaciones y compara con el
 modelo del inciso a) y un modelo adicional que sólo incorpora el `peso`. ¿Cuál
 parece tener mejor capacidad predictiva?
 
+```{r}
+m_1d <- stan_glm(altura ~ log(peso.centrado), data = howell, refresh = 0)
+#prior_summary(m_1a)
+summary(m_1d)
+```
+
+
 e) ¿Cómo interpretas los coeficientes del mejor modelo del inciso `d`?
+
+```{r}
+
+```
+
 
 f) Ahora estudiaremos el efecto de la distribución previa. Para esto
 consideraremos. La variable de `edad` centrada y probaremos distintos polinomios
 como predictores. Consideraremos potencias desde 0 hasta términos de grado 6.
 Ajusta esta colección de posibles modelos. 
 
-g) Para cada modelo en el inciso de arriba, genera graficos que muestren las
+```{r}
+poly(edad.centrado,2,raw=TRUE)
+```
+
+
+g) Para cada modelo en el inciso de arriba, genera gráficos que muestren las
 predicciones junto con las bandas de predicción. 
+
+
 
 h) Realiza una evaluación de los modelos resultantes con el criterio de
 información que consideres más apropiado.
+
+
 
 i) Ahora ajustaremos un polinomio de grado 6 pero incorporaremos distribuciones
 previas mas restrictivas. Es decir, considera que $\beta_k \sim \mathsf{N}(0,
 \sqrt{5})$ para toda $k.$ Nota que la desviación estandar es $\sqrt{5}.$ Evalúa
 el criterio de información que utlizaste en el inciso anterior, y compara la
 estimación de número efectivo de parámetros. ¿Por qué crees que sucede esto?
+
+
 
 ## Datos: Vinos.
 
@@ -122,6 +255,24 @@ de 20 vinos diferentes, tanto franceses y estadounidenses, realizadas por 9
 jueces (también, franceses y estadounidenses) diferentes. El objetivo de este
 ejercicio es modelar el `score`, la calificación subjetiva que cada juez asigna
 a cada vino. Recomiendo centrarlo para el ajuste de los modelos.
+
+```{r}
+datos2<-read_delim("vinos.txt", delim = ";" ) #Cargamos los datos
+```
+
+```{r}
+vinos<-datos2
+vinos$wine.amer<-factor(vinos$wine.amer)
+vinos$judge.amer<-factor(vinos$judge.amer)
+glimpse(vinos)
+```
+
+
+
+```{r}
+summary(vinos)
+```
+
 
 a) En este inciso, sólo considera la variación entre jueces y
 vinos. Ajusta un modelo de regresión lineal utilizando estos predictores.
@@ -159,7 +310,7 @@ Utiliza los datos en `nettle.txt` para evaluar la hipótesis de que la diversida
 lingüística es producto de la seguridad alimentaria. Los datos contienen mediciones para: 
 
 1) `country`: Nombre del país.
-2) `num.lang`: Número de lenguajes identificados en dicho país.
+2) `num.leng`: Número de lenguajes identificados en dicho país.
 3) `area`: Area medida en kilómetros cuadrados.
 4) `k.pop`: Población en miles. 
 5) `num.stations`: Número de estaciones que proveen las siguientes. 
@@ -174,17 +325,24 @@ significa que los grupos culturales pueden ser más pequeños y más
 autosuficientes, lo que lleva a más idiomas per cápita. Utiliza el número de
 idiomas per cápita como resultado:
 
-```{r, eval = FALSE}
-
-data %>% 
-    mutate(leng.per.cap = num.leng/k.pob)
-
+```{r}
+datos3<-read_delim("nettle.txt", delim = ";" ) #Cargamos los datos
 ```
 
+```{r}
+nettle<-datos3
+glimpse(nettle)
+```
+
+
+```{r, eval = FALSE}
+nettle %>% 
+    mutate(leng.per.cap = num.leng/k.pob)
+```
 Utilice el logaritmo de esta nueva variable como el objetivo de un modelo de
 regresión. Este problema tiene un final abierto, lo que les permite decidir cómo
 abordar las hipótesis y las predicciones inciertas que proporciona el modelo. Si
-creen que necesita usar WAIC/LOO en cualquier momento, hágamlo. Si creen que necesitan
+creen que necesita usar WAIC/LOO en cualquier momento, háganlo. Si creen que necesitan
 cierta distribución previa, argumenten por ella. Si creen que necesitan mostrar
 las predicciones de cierta manera, háganlo. Traten de evaluar honestamente
 los efectos principales de la temporada media de crecimiento
