@@ -149,7 +149,7 @@ m_1a$coefficients
 
 Las predicciones para las alturas son:
 
-```
+
 b) Ajusta un modelo lineal para personas menores de 18 años de edad utilizando
 como predictores la `edad` y el `peso`. Interpreta los coeficientes que resultan
 del modelo. Si consideras necesario centra los valores de las variables
@@ -242,6 +242,10 @@ previas mas restrictivas. Es decir, considera que $\beta_k \sim \mathsf{N}(0,
 \sqrt{5})$ para toda $k.$ Nota que la desviación estandar es $\sqrt{5}.$ Evalúa
 el criterio de información que utlizaste en el inciso anterior, y compara la
 estimación de número efectivo de parámetros. ¿Por qué crees que sucede esto?
+
+
+
+
 
 ## Datos: Vinos.
 
@@ -385,6 +389,8 @@ t.test(amer_judge, nonamer_judge)
 data_vinos
 ```
 
+
+
 a) En este inciso, sólo considera la variación entre jueces y
 vinos. Ajusta un modelo de regresión lineal utilizando estos predictores.
 Justifica tu distribución _a priori_. ¿Cómo interpretas la variación entre
@@ -396,10 +402,8 @@ vinos fueron calificados como peores / mejores en promedio?
 ## Estandarizando las variables
 data_vinos
 
-dat_list <- list(
-    jid = as.integer(data_vinos$judge),
-    wid = as.integer(data_vinos$wine)
-)
+m_2a <- stan_glm(score ~ judge + wine, data=data_vinos)
+summary(m_2a)
 ```
 
 
