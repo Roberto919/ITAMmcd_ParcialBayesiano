@@ -149,12 +149,7 @@ m_1a$coefficients
 
 Las predicciones para las alturas son:
 
-```{r}
-alturas<-m_1a$coefficients[1]+(pesos-mean(howell$peso))*m_1a$coefficients[2]
-names(alturas)[1] <- "predicciones_altura"
-alturas
 ```
-
 b) Ajusta un modelo lineal para personas menores de 18 años de edad utilizando
 como predictores la `edad` y el `peso`. Interpreta los coeficientes que resultan
 del modelo. Si consideras necesario centra los valores de las variables
@@ -447,7 +442,7 @@ Utiliza los datos en `nettle.txt` para evaluar la hipótesis de que la diversida
 lingüística es producto de la seguridad alimentaria. Los datos contienen mediciones para: 
 
 1) `country`: Nombre del país.
-2) `num.leng`: Número de lenguajes identificados en dicho país.
+2) `num.lang`: Número de lenguajes identificados en dicho país.
 3) `area`: Area medida en kilómetros cuadrados.
 4) `k.pop`: Población en miles. 
 5) `num.stations`: Número de estaciones que proveen las siguientes. 
@@ -462,20 +457,14 @@ significa que los grupos culturales pueden ser más pequeños y más
 autosuficientes, lo que lleva a más idiomas per cápita. Utiliza el número de
 idiomas per cápita como resultado:
 
-```{r}
-datos3<-read_delim("nettle.txt", delim = ";" ) #Cargamos los datos
-```
-
-```{r}
-nettle<-datos3
-glimpse(nettle)
-```
-
-
 ```{r, eval = FALSE}
-nettle %>%
-    mutate(leng.per.cap = num.leng/k.pob)
-
+data <- read.delim("nettle.txt",sep = ";")
+data <- data %>%
+    mutate(leng.per.cap = num.leng/k.pob)%>%
+    mutate(log.leng.per.cap = log(leng.per.cap))%>%
+    mutate(log.area = log(area))%>%
+    mutate(log.k.pop = log(k.pob))
+data
 ```
 
 Utilice el logaritmo de esta nueva variable como el objetivo de un modelo de
@@ -488,10 +477,201 @@ los efectos principales de la temporada media de crecimiento
 (`mean.growing.season`) y la desviación de la temporada de crecimiento
 (`sd.growing.season`), así como su interacción.
 
+### Respuesta:
+
+Para este análisis, se busca explicar los efectos  principales de la temporada media de crecimiento
+(`mean.growing.season`) y la desviación de la temporada de crecimiento
+(`sd.growing.season`), así como su interacción en el desarrollo de lenguajes en distintas poblaciones.
+
+
+Primero comenzamos con un breve analisis exploratiori ode diferentes variabes para entender la relación entre ellas.
+
+Analisis Exploratiorio
+```{r,eval = FALSE}
+library(psych)
+pairs.panels(data[,3:11],
+            method = "pearson", # correlation method
+             hist.col = "#00AFBB",
+             density = TRUE,  # show density plots
+             ellipses = TRUE # show correlation ellipses
+             )
+boxplot(data$mean.growing.season)
+boxplot(data$sd.growing.season)
+boxplot(data$log.leng.per.cap)
+
+
+```
+Depués comenzamos a desarrollar diferentes modelos que expliquen nuestra variable independiente "log.leng.per.cap". La estrategia es la siguiente, crear un modelo base que contenga `mean.growing.season`,`sd.growing.season`, su interacción y `log.area`. Además, se agregarán a este modelo base otras variables que se encuentran dentro de la base de datos que son `log.k.pop` y `num.stations`. El objetivo es crear diferentes modelos, evaluar su capacidad predictiva por medio de WAIC/LOO y seleccionar el mejor.
+
+
+
+
+```{r,eval = FALSE}
+
+###Basline Model: Only  Mean, SD, Interaction, Area
+model1 <- stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area,
+                  data = data,
+                  prior_intercept = default_prior_intercept("normal"),
+                  prior = default_prior_coef("normal"),
+                  seed = 108727, refresh = 0)
+###Model 2 : Baseline Model + numstations k.pop
+model2 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+num.stations+log.k.pop,
+                  data = data,
+                  prior_intercept = default_prior_intercept("normal"),
+                  prior = default_prior_coef("normal"),
+                  seed = 108727, refresh = 0)
+###Model 3 : Baseline Model + numstations
+model3 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+num.stations,
+                  data = data,
+                  prior_intercept = default_prior_intercept("normal"),
+                  prior = default_prior_coef("normal"),
+                  seed = 108727, refresh = 0)
+
+###Model 4 : Baseline Model + kpop
+model4 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+log.k.pop,
+                  data = data,
+                 prior_intercept = default_prior_intercept("normal"),
+                  prior = default_prior_coef("normal"),
+                  seed = 108727, refresh = 0)
+
+
+```
+
+```{r,eval = FALSE}
+print(model1)
+print(model2)
+print(model3)
+print(model4)
+
+```
+```{r,eval = FALSE}
+loo1<-loo(model1)
+loo2<-loo(model2)
+loo3<-loo(model3)
+loo4<-loo(model4)
+
+
+waic1<-waic(model1)
+waic2<-waic(model2)
+waic3<-waic(model3)
+waic4<-waic(model4)
+
+loo_compare(loo1,loo2,loo3,loo4)
+loo_compare(waic1,waic2,waic3,waic4)
+```
+Además de crear estos modelos, relizamos unas transformaciones a las variables `mean.growing.season`,`sd.growing.season` para centrarlas en su media. Con esto obtenemos las nuevas variables `centered.mean.growing.season`,`centered.sd.growing.season`. En este caso, la interpretación de los coeficientes es un poco distinta.
+
+
+En este caso, las variables `mean.growing.season` y `sd.growing.season` son mayores o iguales a 0.
+
+
+```{r,eval=FALSE}
+
+data_centered = data %>%
+              mutate(centered.mean.growing.season= mean.growing.season - mean(mean.growing.season))%>%
+              mutate(centered.sd.growing.season= sd.growing.season - mean(sd.growing.season))
+
+###Basline Model: Only  Mean, SD, Interaction, Area
+model_centered_1 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area,
+                              data = data_centered,
+                              prior_intercept = default_prior_intercept("normal"),
+                             prior = default_prior_coef("normal"),
+                              seed = 108727, refresh = 0)
+
+### Model centered 2: Basline + numstatiosn + logpop
+model_centered_2 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+num.stations+log.k.pop,
+                              data = data_centered,
+                              prior_intercept = default_prior_intercept("normal"),
+                             prior = default_prior_coef("normal"),
+                              seed = 108727, refresh = 0)
+
+### Model centered 3: Basline + numstatiosn
+model_centered_3 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+num.stations,
+                              data = data_centered,
+                              prior_intercept = default_prior_intercept("normal"),
+                             prior = default_prior_coef("normal"),
+                              seed = 108727, refresh = 0)
+
+### Model centered 4: Basline  + logpop
+model_centered_4 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+log.k.pop,
+                              data = data_centered,
+                              prior_intercept = default_prior_intercept("normal"),
+                             prior = default_prior_coef("normal"),
+                              seed = 108727, refresh = 0)
+
+### Model centered 4: Basline  + logpop + noncentered interactions
+#model_centered_5 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+mean.growing.season*s#d.growing.season+log.area+log.k.pop,
+#                              data = data_centered,
+#                              prior_intercept = default_prior_intercept("normal"),
+#                              prior = default_prior_coef("normal"),
+#                              prior_aux = NULL,
+#                              seed = 108727, refresh = 0)
+```
+
+```{r,eval = FALSE}
+print(model_centered_1)
+print(model_centered_2)
+print(model_centered_3)
+print(model_centered_4)
+#print(model_centered_5)
+
+
+```
+
+```{r,eval = FALSE}
+loo1_centered<-loo(model_centered_1)
+loo2_centered<-loo(model_centered_2)
+loo3_centered<-loo(model_centered_3)
+loo4_centered<-loo(model_centered_4)
+#loo5_centered<-loo(model_centered_5)
+
+waic1_centered<-waic(model_centered_1)
+waic2_centered<-waic(model_centered_2)
+waic3_centered<-waic(model_centered_3)
+waic4_centered<-waic(model_centered_4)
+#waic5_centered<-waic(model_centered_5)
+
+
+loo_compare(loo1_centered,loo2_centered,loo3_centered,loo4_centered)
+loo_compare(waic1_centered,waic2_centered,waic3_centered,waic4_centered)
+```
+
+```{r,eval = FALSE}
+loo_compare(loo1,loo2,loo3,loo4,loo1_centered,loo2_centered,loo3_centered,loo4_centered)
+
+loo_compare(waic1,waic2,waic3,waic4,waic1_centered,waic2_centered,waic3_centered,waic4_centered)
+```
+
 a) Evalúe la hipótesis de que la diversidad lingüística, medida por
 `log(lang.per.cap)`, está asociada positivamente con la duración promedio de la
 temporada de crecimiento, `mean.growing.season`. Considera tambíen  `log(area)`
 en tu modelo (no como una interacción). Interpreten sus resultados.
+
+
+```{r, eval = FALSE}
+
+ggplot(data = data_centered, aes(x = centered.mean.growing.season, y = log.leng.per.cap))  +
+    geom_abline(data = as_tibble(model_centered_4) %>% sample_frac(.2),
+                aes(slope = centered.mean.growing.season, intercept = `(Intercept)`),
+                color = 'grey', alpha = .4) +
+    geom_abline(slope = coef(model_centered_4)[2], intercept = coef(model_centered_4)[1], color = 'salmon') +
+    geom_point()
+
+posterior_vs_prior(model_centered_4,pars= c("centered.mean.growing.season"))
+
+as_tibble(model_centered_4)%>%
+    ggplot(aes(x = centered.mean.growing.season)) +
+        geom_histogram() +
+        geom_vline(xintercept = coef(model_centered_4)[2], lty = 2) +
+        xlab("Valor del Coeficiente")+
+        ggtitle("Distribución posterior del Coeficiente")
+```
+```{r, eval = FALSE}
+posterior_interval(model_centered_4,pars= c("centered.mean.growing.season"))
+```
+
+
+
 
 b) Ahora evalúen la hipótesis de que la diversidad lingüística está asociada
 negativamente con la desviación estándar de la duración de la temporada de
@@ -500,6 +680,30 @@ favorece la seguridad social a través de redes sociales más amplias y, por lo
 tanto, menos idiomas. Nuevamente, considere `log(area)` como una covariable (no
 una interacción). Interpreten sus resultados.
 
+
+```{r, eval = FALSE}
+
+ggplot(data = data_centered, aes(x = sd.growing.season, y = log.leng.per.cap))  +
+    geom_abline(data = as_tibble(model1) %>% sample_frac(.2),
+                aes(slope = sd.growing.season, intercept = `(Intercept)`),
+                color = 'grey', alpha = .4) +
+    geom_abline(slope = coef(model1)[3], intercept = coef(model1)[1], color = 'salmon') +
+    geom_point()
+
+posterior_vs_prior(model1,pars= c("sd.growing.season"))
+
+as_tibble(model1)%>%
+    ggplot(aes(x = sd.growing.season)) +
+        geom_histogram() +
+        geom_vline(xintercept = coef(model1)[3], lty = 2) +
+        xlab("Valor del Coeficiente")+
+        ggtitle("Distribución posterior del Coeficiente")
+```
+```{r, eval = FALSE}
+posterior_interval(model_centered_4,prob = .6, pars= c("centered.sd.growing.season"))
+posterior_interval(model_centered_4,pars= c("centered.sd.growing.season"))
+```
+
 c) Finalmente, evalúen la hipótesis de que `mean.growing.season` y
 `sd.growing.season` interactúan para reducir sinérgicamente la diversidad del
 lenguaje. La idea es que, en naciones con temporadas de cultivo en promedio más
@@ -507,3 +711,28 @@ largas, la alta variación hace que el almacenamiento y la redistribución sean
 aún más importantes de lo que serían de otra manera. De esa manera, las personas
 pueden cooperar para preservar y proteger las ganancias inesperadas que se
 utilizarán durante las sequías.
+
+
+```{r, eval = FALSE}
+ggplot(data = data_centered, aes(x = centered.sd.growing.season*centered.mean.growing.season, y = log.leng.per.cap))  +
+    geom_abline(data = as_tibble(model_centered_4) %>% sample_frac(.2),
+                aes(slope = centered.sd.growing.season*centered.mean.growing.season, intercept = `(Intercept)`),
+                color = 'grey', alpha = .4) +
+    geom_abline(slope = coef(model_centered_4)[6], intercept = coef(model_centered_4)[1], color = 'salmon') +
+    geom_point()
+
+posterior_vs_prior(model_centered_4,pars= c("centered.mean.growing.season:centered.sd.growing.season"))
+
+as_tibble(model_centered_4)%>%
+    ggplot(aes(x = `centered.mean.growing.season:centered.sd.growing.season`)) +
+        geom_histogram() +
+        geom_vline(xintercept = coef(model_centered_4)[6], lty = 2) +
+        xlab("Valor del Coeficiente")+
+        ggtitle("Distribución posterior del Coeficiente")
+
+```
+
+```{r, eval = FALSE}
+posterior_interval(model_centered_4,pars= c("centered.mean.growing.season:centered.sd.growing.season"))
+```
+
