@@ -53,6 +53,7 @@ library(bayesplot)
 library(loo)
 library(patchwork)
 library(scales)
+library(ggplot2)
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE, 
                       fig.align = 'center', fig.width = 5, fig.height=3, cache = TRUE)
 comma <- function(x) format(x, digits = 2, big.mark = ",")
@@ -72,86 +73,93 @@ las alturas e intervalos del 89% para cada uno de estos individuos basados en un
 modelo de regresión lineal.
 
 ```{r}
-peso<-tibble(peso = c(46.95, 43.72, 64.78, 32.59, 54.63))
-peso
+pesos<-tibble(peso = c(46.95, 43.72, 64.78, 32.59, 54.63))
+pesos
 ```
 
+
+Dado que queremos generar predicciones para las alturas y sólo tenemos los pesos, decidimos utilizar un modelo de regresión lineal bajo un enfoque bayesiano utilizando como variable predictora el peso.
 
 ```{r}
 datos1<-read_delim("howell.csv", delim = ";" ) #Cargamos los datos
 ```
 
+Para lo cual, primero haremos un análisis exploratorio a los datos parciales del censo para conocer más al respecto.
+
 ```{r}
 howell<-datos1
-howell$genero<-factor(howell$genero)
-glimpse(howell)
+head(howell)
 ```
 
+Primero identificamos que nuestro conjunto de datos contiene únicamente 544 observaciones y 4 columnas. Donde la variable a predecir (altura) se encuentra en centímetros, el peso en kg, la edad en años y el género es un indicador de sexo masculino cuando toma el valor de 1.
 
 ```{r}
-#altura en cm
-#eso en kg
-#edad en años
-#indicador si es hombre
+howell$genero<-factor(howell$genero) #Convertimos la variable a factor
 summary(howell)
 ```
 
-```{r}
-m_1a <- lm(altura ~ peso, howell)
-summary(m_1a)
-```
+Después vemos que la muestra contiene a personas de 0 a 88 años de edad con pesos que van de los 4 kilos a los 63. Sin embargo, llama nuestra atención que aunque la mediana de altura está alrededor de 1.5 metros, mediana de la edad corresponde a una persona adulta con 27 años de edad y 40 kg de peso. Lo anterior en el sentido de que si se tratara de una muestra en una población mexicana los pesos de los adultos serían más altos así como las alturas dado que en México somos una población donde la mayoría tiene sobrepeso u obesidad. Por ello, concluimos que no tenemos suficiente información preliminar para que podamos proponer distribuciones previas para los parámetros del modelo. De lo anterior, utilizamos el default de la distribución que proporciona stan_glm (una distribución poco informativa) para no sesgar nuestro modelo:
 
 ```{r}
-m_1a <- stan_glm(altura ~ peso, data = howell, refresh = 0)
-#prior_summary(m_1a)
-summary(m_1a)
+SEED <- 2021
+set.seed(SEED)
+fit_1a <- stan_glm(altura ~ peso, data = howell, seed=SEED, refresh = 0)
+print(fit_1a)
+```
+
+Lo anterior nos dice que la predicción es precisa hasta más / menos 9.4 unidades que en este caso son centímetros.
+
+```{r}
+prior_summary(fit_1a)
+```
+
+Como comentamos, la distribución previa que utilizamos es la de default la cual parte de nuestra muestra de 544 observaciones. Esto es, para el intercepto utiliza la altura media de nuestros datos con una desviación estándar de 2.5 para el intercepto y el peso.
+
+```{r}
+summary(fit_1a)
 ```
 
 
-### Predicciones usando `stan_glm`
+Ahora utilizaremos la función posterior_predict() para calcular las predicciones de altura con base en los pesos de los 5 individuos bajo nuestro modelo de regresión ya que considera la incertidumbre asociada al error observacional (epsilon) incorporando sigma o el error aditivo.
 
-```{r }
-new <- data.frame(peso)
-y_point_pred <- predict(m_1a, newdata=new)
-y_point_pred
+```{r}
+post_predict_1a<-as_tibble(posterior_predict(fit_1a, newdata=new,seed=SEED)) %>% 
+  #cada fila es una simulación bajo una muestra distinta
+  mutate(sample_id = 1:4000) %>% #creamos ID para cada
+  pivot_longer(cols = 1:5) %>%
+  mutate(individuo = fct_inorder(name)) %>% 
+  group_by(individuo) %>% #es la predicción de cada individuo (1-5)
+  summarise(altura_mean=mean(value), 
+            altura_median=median(value),
+            altura_low=quantile(value,.055), #intervalos del 89% de probabilidad
+            altura_hi=quantile(value,.945))
+
+post_predict_1a<-post_predict_1a %>%
+  mutate(pesos)
+post_predict_1a
 ```
 
+```{r}
+g_1a<-post_predict_1a %>%
+  ggplot(aes(peso,altura_mean)) +
+  geom_ribbon(aes(ymin=altura_low,ymax=altura_hi),alpha=.3)+
+  geom_line(color="red") + sin_lineas +
+  geom_jitter(data=howell %>% filter(peso>40),
+              aes(peso,altura),
+              height = 0, width = 0.01, colour="black")
+g_1a
+```
+
+
 ```{r }
-y_linpred <- posterior_linpred(m_1a, newdata=new)
+y_linpred <- posterior_linpred(fit_1a, newdata=new,seed=SEED) 
+#predice únicamente a partir de la variación alrededor de la media
+#son las predicciones de la distribución posterior incorporando el nivel de incertidumbre asociado al error de medición
+#incertidumbre asociada a los coeficientes únicamente
+#tenemos nuestra nueva variable, se multiplica por los coeficientes
 summary(y_linpred)
 ```
 
-```{r }
-y_pred <- posterior_predict(m_1a, newdata=new)
-summary(y_pred)
-```
-
-Para poder dar una interpretación más sencilla al modelo lineal para predecir la altura, estandarizaremos las variables numéricas centrando al rededor de su media:
-
-```{r, eval = FALSE}
-howell<-howell %>% 
-  mutate(peso.centrado = peso-mean(peso))
-howell
-```
-
-Una persona promedio con peso y edad promedio tendría una altura de 138 cm, cuando la persona tiene un punto adicional sobre el peso promedio, la altura aumenta 1.76cm.
-
-```{r}
-m_1a <- lm(altura ~ peso.centrado, howell)
-summary(m_1a)
-```
-
-```{r}
-m_1a$coefficients
-```
-
-Las predicciones para las alturas son:
-
-```{r}
-alturas<-m_1a$coefficients[1]+(pesos-mean(howell$peso))*m_1a$coefficients[2]
-names(alturas)[1] <- "predicciones_altura"
-alturas
-```
 
 b) Ajusta un modelo lineal para personas menores de 18 años de edad utilizando
 como predictores la `edad` y el `peso`. Interpreta los coeficientes que resultan
@@ -160,26 +168,31 @@ predictoras.
 
 ```{r}
 menores_edad<-datos1 %>% filter(edad < 18)
-menores_edad
+menores_edad$genero<-factor(menores_edad$genero) #Convertimos la variable a factor
+head(menores_edad)
 ```
-Para poder dar una interpretación más sencilla al modelo lineal para predecir la altura, centraremos las variables numéricas centrando al rededor de su media:
+Para poder dar una interpretación más sencilla al modelo lineal para predecir la altura, centramos las variables alrededor de su media:
 
 ```{r, eval = FALSE}
 menores_edad<-menores_edad %>% 
   mutate(peso.centrado = peso-mean(peso),
          edad.centrado = edad-mean(edad))
-menores_edad
+head(menores_edad)
 ```
-```{r}
-m_1b <- lm(altura ~ peso.centrado+ edad.centrado, menores_edad)
-summary(m_1b)
-```
+Y generamos el modelo con ambos predictores centrados:
 
 ```{r}
-m_1b <- stan_glm(altura ~ peso.centrado+ edad.centrado, data = menores_edad, refresh = 0)
-#prior_summary(m_2a)
-summary(m_1b)
+fit_1b <- stan_glm(altura ~ peso.centrado + edad.centrado, data = menores_edad, seed=SEED, refresh = 0)
+print(fit_1b)
 ```
+
+Obtenemos un resumen del modelo:
+
+```{r}
+summary(fit_1b)
+```
+
+De los resultados anteriores, vemos que el intercepto representa la altura promedio de los menores de 18 años para una persona con un peso y edad alrededor del promedio la cual corresponde a 108 cm o 1.08 metros. Por otro lado, el peso y edad centrada tienen un coeficiente positivo en el modelo, lo cual indica para ambos predictores un incremento sobre el valor promedio centrado del contribuye a un incremento en la predicción de la altura. En el caso del peso.centrado, dicho incremento aumenta 1.4 cm la altura y la edad, tiene una mayor aportación al pronóstico sumando 2.3cm adicionales.
 
 c) Para el modelo resultante, haz gráficos que muestren la relación de la
 variable objetivo con los predictores. De igual forma, incorpora en la
@@ -188,14 +201,17 @@ al 89\% y 97\%, de tal forma que incorpores la incertidumbre que se ha
 cuantificado en tu gráfico.
 
 ```{r}
-menores_edad %>%
+g1<-menores_edad %>%
   ggplot(aes(x=peso.centrado,y=altura)) +
   geom_point()
-```
-```{r}
-menores_edad %>%
+
+g2<-menores_edad %>%
   ggplot(aes(x=edad.centrado,y=altura)) +
   geom_point()
+
+
+
+g1+g2
 ```
 
 
@@ -207,7 +223,8 @@ modelo del inciso a) y un modelo adicional que sólo incorpora el `peso`. ¿Cuá
 parece tener mejor capacidad predictiva?
 
 ```{r}
-m_1d <- stan_glm(altura ~ log(peso.centrado), data = howell, refresh = 0)
+#howell.centrado
+m_1d <- stan_glm(altura ~ log(peso), data = howell, seed=SEED, refresh = 0)
 #prior_summary(m_1a)
 summary(m_1d)
 ```
@@ -215,10 +232,7 @@ summary(m_1d)
 
 e) ¿Cómo interpretas los coeficientes del mejor modelo del inciso `d`?
 
-```{r}
-
-```
-
+INTERCEPTO NEGATIVO!
 
 f) Ahora estudiaremos el efecto de la distribución previa. Para esto
 consideraremos. La variable de `edad` centrada y probaremos distintos polinomios
@@ -226,18 +240,32 @@ como predictores. Consideraremos potencias desde 0 hasta términos de grado 6.
 Ajusta esta colección de posibles modelos. 
 
 ```{r}
+poly(edad.centrado,1,raw=TRUE)
 poly(edad.centrado,2,raw=TRUE)
+poly(edad.centrado,3,raw=TRUE)
+poly(edad.centrado,4,raw=TRUE)
+poly(edad.centrado,5,raw=TRUE)
+poly(edad.centrado,6,raw=TRUE)
 ```
 
 
 g) Para cada modelo en el inciso de arriba, genera gráficos que muestren las
 predicciones junto con las bandas de predicción. 
 
+```{r}
+
+```
 
 
 h) Realiza una evaluación de los modelos resultantes con el criterio de
 información que consideres más apropiado.
 
+Cuando utilizamos los criterios de información estamos midiendo su capacidad predictiva, qué tan bien predice el modelo en datos que no has observado: validación cruzada, WAIC (decir cómo le va al modelo para predecir en un futuro). Cuál es el mejor modelo (devianza)
+
+
+```{r}
+
+```
 
 
 i) Ahora ajustaremos un polinomio de grado 6 pero incorporaremos distribuciones
@@ -245,6 +273,13 @@ previas mas restrictivas. Es decir, considera que $\beta_k \sim \mathsf{N}(0,
 \sqrt{5})$ para toda $k.$ Nota que la desviación estandar es $\sqrt{5}.$ Evalúa
 el criterio de información que utlizaste en el inciso anterior, y compara la
 estimación de número efectivo de parámetros. ¿Por qué crees que sucede esto?
+
+compara la
+estimación de número efectivo de parámetros (cómo cambia)
+
+```{r}
+
+```
 
 
 
@@ -339,6 +374,7 @@ glimpse(nettle)
 nettle %>% 
     mutate(leng.per.cap = num.leng/k.pob)
 ```
+
 Utilice el logaritmo de esta nueva variable como el objetivo de un modelo de
 regresión. Este problema tiene un final abierto, lo que les permite decidir cómo
 abordar las hipótesis y las predicciones inciertas que proporciona el modelo. Si
