@@ -115,6 +115,10 @@ previas mas restrictivas. Es decir, considera que $\beta_k \sim \mathsf{N}(0,
 el criterio de información que utlizaste en el inciso anterior, y compara la
 estimación de número efectivo de parámetros. ¿Por qué crees que sucede esto?
 
+
+
+
+
 ## Datos: Vinos.
 
 Consideremos el conjunto de datos en `vinos.txt`. Estos datos son evaluaciones
@@ -123,12 +127,96 @@ jueces (también, franceses y estadounidenses) diferentes. El objetivo de este
 ejercicio es modelar el `score`, la calificación subjetiva que cada juez asigna
 a cada vino. Recomiendo centrarlo para el ajuste de los modelos.
 
+```{r}
+## Lectura de los datos
+data_vinos <- read.table("vinos.txt", sep=";", header=TRUE)
+data_vinos
+```
+
+```{r}
+## Explorando predictores
+unique(data_vinos$judge)
+unique(data_vinos$wine)
+unique(data_vinos$flight)
+unique(data_vinos$wine.amer)
+unique(data_vinos$judge.amer)
+```
+
+```{r}
+## Explorando la distribución de scores
+data_vinos %>% 
+    ggplot(
+        aes(score)
+    ) + geom_boxplot()
+```
+```{r}
+data_vinos
+```
+
+```{r}
+## Exploración de calificaciones según el tipo de vino
+data_vinos %>% 
+  group_by(flight) %>% 
+  summarise(
+    mean(wine.amer), 
+    mean(score), 
+    n(), 
+    max(score), 
+    min(score)
+  )
+
+t.test(
+  filter(data_vinos, flight == "red")$score, filter(data_vinos, flight != "red")$score
+)
+```
+Aquí podemos observar que no hay una diferencia relevante en las calificaciones según el tipo de vino (rojo o blanco).
+
+```{r}
+## Exploración de las calificaciones por el origen del vino
+data_vinos %>% 
+  group_by(wine.amer) %>% 
+  summarise(
+    n(),
+    mean(score),
+    min(score),
+    max(score)
+  )
+```
+Aquí vemos que tampoco hay una diferencia muy grande en las calificaciones según el origen del vino.
+
+```{r}
+
+```
+
+
+
 a) En este inciso, sólo considera la variación entre jueces y
 vinos. Ajusta un modelo de regresión lineal utilizando estos predictores.
 Justifica tu distribución _a priori_. ¿Cómo interpretas la variación entre
 jueces individuales y vinos individuales? ¿Notas algún patrón (puedes utilizar
 `mcmc_areas`)? ¿Qué jueces dieron las calificaciones más altas / más bajas? ¿Qué
 vinos fueron calificados como peores / mejores en promedio?
+
+```{r}
+## Estandarizando las variables
+data_vinos
+
+dat_list <- list(
+    jid = as.integer(data_vinos$judge),
+    wid = as.integer(data_vinos$wine)
+)
+```
+
+
+```{r}
+modelo_d1 <- lm(score ~ judge + wine, data=data_vinos)
+modelo_d1
+```
+
+```{r}
+summary(modelo_d1)
+```
+
 
 
 b) Ajusta con la previa _default_ en `stan_glm`. Después, ajusta de nuevo el
