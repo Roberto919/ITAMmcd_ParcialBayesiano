@@ -319,7 +319,7 @@ bx2 <- data_vinos %>%
     ggplot(
         aes(score_c)
     ) + geom_histogram(fill="green") +
-  labs(title="Score ajustado")
+  labs(title="Score centrado")
 
 bx1 + bx2
 ```
