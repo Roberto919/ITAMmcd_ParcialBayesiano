@@ -404,13 +404,24 @@ data_vinos %>%
 
 ```{r}
 ## Evaluando diferencias en vinos rojos dependiendo de su origen.
-amer_red <- filter(data_vinos, wine.amer == 1, flight == "red")$score
-nonamer_red <- filter(data_vinos, wine.amer == 0, flight == "red")$score
+amer_red <- data.frame(
+  score = filter(data_vinos, wine.amer == 1, flight == "red")$score,
+  type = "rojo_americano"
+)
 
-hist(amer_red, col="red")
-hist(nonamer_red, col="green", add=T)
+nonamer_red <- data.frame(
+  score = filter(data_vinos, wine.amer == 0, flight == "red")$score,
+  type = "rojo_no_americano"
+)
 
-t.test(amer_red, nonamer_red)
+rbind(amer_red, nonamer_red) %>% 
+  ggplot(
+    aes(x=score, color=type)
+  ) + geom_histogram(fill="white") + 
+  labs(title="Comparación de vinos (rojos) según su origen")
+  
+
+t.test(filter(data_vinos, wine.amer == 1, flight == "red")$score, filter(data_vinos, wine.amer == 0, flight == "red")$score)
 ```
 **El resultado de la prueba Welch indica que sí hay una diferencia estadísticamente significativa (asumiendo un valor-p límite de 0.05) en el score de los vinos rojos dependiendo de su origen.**
 
@@ -418,13 +429,24 @@ t.test(amer_red, nonamer_red)
 
 ```{r}
 ## Evaluando diferencias en vinos blancos dependiendo de su origen.
-amer_white <- filter(data_vinos, wine.amer == 1, flight == "white")$score
-nonamer_white <- filter(data_vinos, wine.amer == 0, flight == "white")$score
+amer_white <- data.frame(
+  score = filter(data_vinos, wine.amer == 1, flight == "white")$score,
+  type = "blanco_americano"
+)
 
-hist(amer_white, col="red")
-hist(nonamer_white, col="green", add=T)
+nonamer_white <- data.frame(
+  score = filter(data_vinos, wine.amer == 0, flight == "white")$score,
+  type = "blanco_no_americano"
+)
 
-t.test(amer_white, nonamer_white)
+rbind(amer_white, nonamer_white) %>% 
+  ggplot(
+    aes(x=score, color=type)
+  ) + geom_histogram(fill="white") + 
+  labs(title="Comparación de vinos (blancos) según su origen")
+  
+
+t.test(filter(data_vinos, wine.amer == 1, flight == "white")$score, filter(data_vinos, wine.amer == 0, flight == "white")$score)
 ```
 **Aquí obsservamos que no hay una diferencia estadísticamente significativa en los vinos blancos dependiendo de su origen.**
 
