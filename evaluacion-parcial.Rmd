@@ -267,7 +267,12 @@ data_vinos <- read.table("vinos.txt", sep=";", header=TRUE)
 ## Creando columna con variable "score" centrada
 data_vinos <- data_vinos %>%
   mutate(
-    score_c = score - mean(score)
+    score_c = score - mean(score),
+    judge = ifelse(judge.amer == 1, paste0(judge, " (AM)"), paste0(judge, " (FR)")),
+    wine = ifelse(wine.amer == 1, paste0(wine, " (AM)"), paste0(wine, " (FR)")),
+  ) %>% 
+  mutate(
+    wine = ifelse(flight == "white", paste0(wine, " - white"), paste0(wine, " - red")),
   )
 
 data_vinos
@@ -280,11 +285,28 @@ data_vinos
 ### Exploración inicial de los datos
 ```{r}
 #### Explorando predictores
+print("Nombres de los jueces en el set de datos: ")
 unique(data_vinos$judge)
+cat("\n")
+
+print("Conteo de jueces por nacionalidad: ")
+paste0("Franceses: ", length(grep("(FR)", unique(data_vinos$judge))))
+paste0("Americanos: ", length(grep("(AM)", unique(data_vinos$judge))))
+cat("\n")
+
+print("Vinos incorporados en la competencia: ")
 unique(data_vinos$wine)
+cat("\n")
+
+print("Conteo de vinos por nacionalidad: ")
+paste0("Franceses: ", length(grep("(FR)", unique(data_vinos$wine))))
+paste0("Americanos: ", length(grep("(AM)", unique(data_vinos$wine))))
+cat("\n")
+
+print("Tipos de vinos en la competencia: ")
 unique(data_vinos$flight)
-unique(data_vinos$wine.amer)
-unique(data_vinos$judge.amer)
+cat("\n")
+
 
 #### Explorando la distribución de scores
 bx1 <- data_vinos %>%
@@ -302,8 +324,6 @@ bx1 + bx2
 
 
 
-
-
 ### Evaluación del comportamiento de los datos
 
 ```{r}
@@ -311,11 +331,12 @@ bx1 + bx2
 data_vinos %>% 
   group_by(judge) %>% 
   summarise(
-    mean(score_c),
+    mean = mean(score_c),
     n(),
     max(score_c),
     min(score_c)
-  )
+  ) %>% 
+  arrange(mean)
 ```
 
 ```{r}
@@ -323,11 +344,12 @@ data_vinos %>%
 data_vinos %>% 
   group_by(wine) %>% 
   summarise(
-    mean(score_c),
+    mean = mean(score_c),
     n(),
     max(score_c),
     min(score_c)
-  )
+  ) %>% 
+  arrange(desc(mean))
 ```
 
 ```{r}
@@ -455,7 +477,8 @@ print(m_2a)
 mcmc_areas(m_2a)
 ```
 **Esta visualización nos permite ver la estimación de los intervalos posterior, con la cual podemos hacer las siguientes observaciones:**
-**1. **
+**1. Los jueces con una desviación positiva fueron menos estrictos al momento de dar una calificación que los juecs que muestran una desviación negativa. Por lo tanto, podemos observar que los jueces más estrictos fueron Jean-M Cardepat y Robert Hodgson.**
+**2. Similar al tema de los jueces, los vinos que tuvieron una desviación negativa fueron los más penalizados, mientras que los que mostraron una desviación positiva fueron los más reconocidos. A diferencia del tema de los jueces, vemos un comportamiento más consistente en los intervalos de los vinos.**
 
 
 
@@ -511,6 +534,15 @@ mcmc_hist(
 
 **Al copmarar la R^2-Bayesiana podemos observar que...**
 
+```{r}
+waic_m_2b1 <- waic(m_2b1)
+waic_m_2b2 <- waic(m_2b2)
+
+comp_waic <- cbind(waic_m_2b1, waic_m_2b2)
+comp_waic
+```
+**Al observar los resultados de la prueba waic, pordemos notar que...**
+
 
 c) Ahora considera como predictores `flight`(el tipo de vino), `wine.amer` (de
 dónde proviene), y `judge.amer` (indicador si el juez es americano). Para este
@@ -528,10 +560,18 @@ m_2c <- stan_glm(score_c ~ flight + wine.amer + judge.amer,
                )
 # summary(m_2a)
 print(m_2c)
+```
+**Para este ejercicio, se optó por utilizar una distribución previa de ...**
 
+
+```{r}
 mcmc_areas(m_2c)
 ```
-**Al graficar las**
+
+**A partir de la gráfica de distribucioines posterior podemos observar lo siguiente:**
+**1. No hay una diferencia relevante en el score dado el tipo de vino (rojo o blanco).**
+**2. Los jueces americanos tienden a ser un poco menos estrictos que los no americanos.**
+**3. Los vinos americanos tienden a ser más peores calificados que los no americanos.**
 
 
 d) Ahora considera todas las posibles interacciones de dos términos con las tres
@@ -553,6 +593,8 @@ print(m_2d)
 mcmc_areas(m_2d)
 ```
 
+**A partir de esta última gráfica de distribuciones posteriores, podemos hacer las siguientes observaciones:**
+**1. **
 
 
 ### Datos:
