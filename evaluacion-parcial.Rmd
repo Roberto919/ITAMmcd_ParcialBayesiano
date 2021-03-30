@@ -152,7 +152,6 @@ variables de arriba. Explica lo que significa cada término e interpreta los
 coeficientes. ¿Cómo se relacionan estos resultados con los del inciso `a` de
 esta sección?
 
-
 ### Datos: 
 
 Utiliza los datos en `nettle.txt` para evaluar la hipótesis de que la diversidad
@@ -201,7 +200,7 @@ Para este análisis, se busca explicar los efectos  principales de la temporada 
 (`sd.growing.season`), así como su interacción en el desarrollo de lenguajes en distintas poblaciones. 
 
 
-Primero comenzamos con un breve analisis exploratiori ode diferentes variabes para entender la relación entre ellas. 
+Primero comenzamos con un breve análisis exploratiorio de diferentes variabes para entender la relación entre ellas. 
 
 Analisis Exploratiorio 
 ```{r,eval = FALSE}
@@ -212,15 +211,15 @@ pairs.panels(data[,3:11],
              density = TRUE,  # show density plots
              ellipses = TRUE # show correlation ellipses
              )
-boxplot(data$mean.growing.season)
-boxplot(data$sd.growing.season)
-boxplot(data$log.leng.per.cap)
+boxplot(data$mean.growing.season, main = "mean.growing.season")
+boxplot(data$sd.growing.season, main = "sd.growing.season")
+boxplot(data$log.leng.per.cap, main = "log.leng.per.cap" )
 
 
 ```
-Depués comenzamos a desarrollar diferentes modelos que expliquen nuestra variable independiente "log.leng.per.cap". La estrategia es la siguiente, crear un modelo base que contenga `mean.growing.season`,`sd.growing.season`, su interacción y `log.area`. Además, se agregarán a este modelo base otras variables que se encuentran dentro de la base de datos que son `log.k.pop` y `num.stations`. El objetivo es crear diferentes modelos, evaluar su capacidad predictiva por medio de WAIC/LOO y seleccionar el mejor. 
+Depués comenzamos a desarrollar diferentes modelos que expliquen nuestra variable independiente "log.leng.per.cap". La estrategia es la siguiente: crear un modelo base que contenga `mean.growing.season`,`sd.growing.season`, su interacción y `log.area`. Además, se agregarán a este modelo base otras variables que se encuentran dentro de la base de datos que son `log.k.pop` y `num.stations`. El objetivo es crear diferentes modelos, evaluar su capacidad predictiva por medio de WAIC/LOO y seleccionar el mejor. 
 
-
+En este caso, las variables `mean.growing.season` y `sd.growing.season` son mayores o iguales a 0. 
 
 
 ```{r,eval = FALSE}
@@ -255,10 +254,10 @@ model4 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.gr
 ```
 
 ```{r,eval = FALSE}
-print(model1)
-print(model2)
-print(model3)
-print(model4)
+summary(model1)
+summary(model2)
+summary(model3)
+summary(model4)
 
 ```
 ```{r,eval = FALSE}
@@ -279,7 +278,7 @@ loo_compare(waic1,waic2,waic3,waic4)
 Además de crear estos modelos, relizamos unas transformaciones a las variables `mean.growing.season`,`sd.growing.season` para centrarlas en su media. Con esto obtenemos las nuevas variables `centered.mean.growing.season`,`centered.sd.growing.season`. En este caso, la interpretación de los coeficientes es un poco distinta.
 
 
-En este caso, las variables `mean.growing.season` y `sd.growing.season` son mayores o iguales a 0. 
+
 
 
 ```{r,eval=FALSE}
@@ -316,21 +315,14 @@ model_centered_4 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+cente
                              prior = default_prior_coef("normal"),
                               seed = 108727, refresh = 0)
 
-### Model centered 4: Basline  + logpop + noncentered interactions
-#model_centered_5 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+mean.growing.season*s#d.growing.season+log.area+log.k.pop, 
-#                              data = data_centered,
-#                              prior_intercept = default_prior_intercept("normal"),
-#                              prior = default_prior_coef("normal"),
-#                              prior_aux = NULL,
-#                              seed = 108727, refresh = 0)
+
 ```
 
 ```{r,eval = FALSE}
-print(model_centered_1)
-print(model_centered_2)
-print(model_centered_3)
-print(model_centered_4)
-#print(model_centered_5)
+summary(model_centered_1)
+summary(model_centered_2)
+summary(model_centered_3)
+summary(model_centered_4)
 
 
 ```
@@ -358,11 +350,48 @@ loo_compare(loo1,loo2,loo3,loo4,loo1_centered,loo2_centered,loo3_centered,loo4_c
 
 loo_compare(waic1,waic2,waic3,waic4,waic1_centered,waic2_centered,waic3_centered,waic4_centered)
 ```
+```{r,eval = FALSE}
+print(loo4)
+print(loo4_centered)
+print(waic4)
+print(waic4_centered)
+```
+
+
+
+En conclusión, tenemos que el mejor modelo es el `model_centered_4` por un pequeño margen utilizando el criterio de loo como indicador. Tenemos que este modelo es el que tiene mayor log densidad predictiva. Además, el hecho de que contenga variables centradas, no afecta la interpretación de los coeficientes en cuanto a que ayuda a responder las hipótesis planteadas más adelante. Hay un punto importante a resaltar, el valor de 0 tanto en   `mean.growing.season` y  `sd.growing.season` sí tienen una interpretación, es decir que no tienen temporada de crecimiento y que no existe variabilidad en ella. Sin embargo, al estudiar los datos, esto solo se presenta en dos observaciones y es un valor poco frecuente. Dado que los datos incluyen únicamente paises ubicados dentro de los trópicos, se decidió usar el modelo con variables centradas ya que se prefiere interpretar los coeficientes como el cambio en la diversidad linguística con respecto a la desviación de la duración de la temporada promedio o la variabilidad promedio. En otras palabras, no nos importa tanto el valor de la temporada de crecimiento (o variabilidad) en sí, sino que más larga o corta es con respecto a los demás. Además, se está controlando por la interacción entre ambas variables. 
+
+El modelo resultante es el siguiente:
+
+$$\hat{y}= \hat\beta_0 + \hat\beta_1(x_1-\bar x_1)+\hat\beta_2(x_2-\bar x_2) + \hat\beta_3(x_1-\bar x_1)*(x_2-\bar x_2)+\hat\beta_4 x_4+\hat\beta_5 x_5$$
+
+
+Con $x_1 = $ temporada de crecimiento y x_2 = $ variabilidad en temporada de crecimiento.
+
+Por lo tanto, ante un cambio en $x_1$ $\hat y $ cambia en $\hat\beta_1+\hat\beta_3*(x_2-\bar x_2)$ unidades y ante un cambio en $x_2$ $\hat y $ cambia en $\hat\beta_2+\hat\beta_3*(x_1-\bar x_1)$ unidades.
+
+
+Dado que $y$ es una transformacion logaritmica de la variable de lenguajes per capita, si buscamos predecir esta variable es necesario hacer la siguiente transformacion del modelo: 
+
+Si z es lenguajes per capita
+$$ y = \ln(z) $$
+$$y= \beta_0 + \beta_1(x_1-\bar x_1)+\beta_2(x_2-\bar x_2) + \beta_3(x_1-\bar x_1)*(x_2-\bar x_2)+\beta_4 x_4+\beta_5 x_5 +\epsilon$$
+Se obtiene que:
+
+$$z= e^{\beta_0 + \beta_1(x_1-\bar x_1)+\beta_2(x_2-\bar x_2) + \beta_3(x_1-\bar x_1)*(x_2-\bar x_2)+\beta_4 x_4+\beta_5 x_5 +\epsilon}$$
+Como el modelo solo busca probar ciertas hipótesis y no predecir, no es necesario realizar esta transformación. 
 
 a) Evalúe la hipótesis de que la diversidad lingüística, medida por
 `log(lang.per.cap)`, está asociada positivamente con la duración promedio de la
 temporada de crecimiento, `mean.growing.season`. Considera tambíen  `log(area)`
 en tu modelo (no como una interacción). Interpreten sus resultados.
+ 
+ 
+ La hipotesis de que la  diversidad lingüística, medida por
+`log(lang.per.cap)`, está asociada positivamente con la duración promedio de la
+temporada de crecimiento, `mean.growing.season` es correcta. En este modelo se observa que el coeficiente asociado a la 
+variable `centered.mean.growing.season` es positivo. La interpretacion es que en pais, mientras mas dure la temporada de crecimiento relativo a los valores promedio, mayor sera la diversidad linguistica. Esto quiere decir que mientras más larga sea la temprorada de crecimiento mayor será la diversidad linguística. Además observamos que la distribucion posterior del coeficiente asociado a la variable `centered.mean.growing.season` será positivo con un 90% de probabilidad ya que su intervalo de confianza va de 0.089 a 0.239.
+
 
 
 ```{r, eval = FALSE}
@@ -398,21 +427,27 @@ tanto, menos idiomas. Nuevamente, considere `log(area)` como una covariable (no
 una interacción). Interpreten sus resultados.
 
 
+ La hipotesis de que la diversidad lingüística está asociada
+negativamente con la desviación estándar de la duración de la temporada de
+crecimiento no puede confirmarse. . En este modelo se observa que el coeficiente asociado a la 
+variable `centered.sd.growing.season` es negativo La interpretacion es que en pais, mientras mas variación la temporada de crecimiento relativo a los valores de variación promedio, menor sera la diversidad linguistica. Esto quiere decir que mientras más variabilidad haya en la temporada de crecimiento menor será la diversidad linguística. Además observamos que con la distribucion posterior del coeficiente asociado a la variable `centered.sd.growing.season` no puede confirmarse que tenga valores siempre negativos. El intervalo de confianza asociado es de -0.367 a 0.0902 con un 90% de certeza. 
+
+
 ```{r, eval = FALSE}
 
-ggplot(data = data_centered, aes(x = sd.growing.season, y = log.leng.per.cap))  + 
-    geom_abline(data = as_tibble(model1) %>% sample_frac(.2), 
-                aes(slope = sd.growing.season, intercept = `(Intercept)`), 
+ggplot(data = data_centered, aes(x = centered.sd.growing.season, y = log.leng.per.cap))  + 
+    geom_abline(data = as_tibble(model_centered_1) %>% sample_frac(.2), 
+                aes(slope = centered.sd.growing.season, intercept = `(Intercept)`), 
                 color = 'grey', alpha = .4) + 
-    geom_abline(slope = coef(model1)[3], intercept = coef(model1)[1], color = 'salmon') + 
+    geom_abline(slope = coef(model_centered_1)[3], intercept = coef(model_centered_1)[1], color = 'salmon') + 
     geom_point()
 
-posterior_vs_prior(model1,pars= c("sd.growing.season"))
+posterior_vs_prior(model_centered_1,pars= c("centered.sd.growing.season"))
 
-as_tibble(model1)%>% 
-    ggplot(aes(x = sd.growing.season)) + 
+as_tibble(model_centered_1)%>% 
+    ggplot(aes(x = centered.sd.growing.season)) + 
         geom_histogram() + 
-        geom_vline(xintercept = coef(model1)[3], lty = 2) + 
+        geom_vline(xintercept = coef(model_centered_1)[3], lty = 2) + 
         xlab("Valor del Coeficiente")+
         ggtitle("Distribución posterior del Coeficiente")
 ```
@@ -428,6 +463,11 @@ largas, la alta variación hace que el almacenamiento y la redistribución sean
 aún más importantes de lo que serían de otra manera. De esa manera, las personas
 pueden cooperar para preservar y proteger las ganancias inesperadas que se
 utilizarán durante las sequías.
+
+Por último, se analiza la interacción entre la duración y la variabilidad de la temprada de crecimiento. La hipótesis sugiere que cuando ambas son muy largas o muy cortas relativas al promedio, la diversidad linguística se reduce. En este caso, de acuerdo con nuestro modelo, la hipótesis sí puede confirmarse. De acuerdo con la distribución posterior de los parámetros, el intervalo de confianza con 90% de certeza se encuentra entre -0.1261 y -0.0097. Estos intervalos confirman la relación negativa entre la interacción de `mean.growing.season` y `sd.growing.season` en la diversidad linguística.
+
+
+
 
 
 ```{r, eval = FALSE}
