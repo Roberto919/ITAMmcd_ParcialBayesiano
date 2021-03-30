@@ -55,7 +55,7 @@ library(loo)
 
 library(patchwork)
 library(scales)
-knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE, 
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE,
                       fig.align = 'center', fig.width = 5, fig.height=3, cache = TRUE)
 comma <- function(x) format(x, digits = 2, big.mark = ",")
 theme_set(theme_linedraw())
@@ -220,7 +220,7 @@ e) ¿Cómo interpretas los coeficientes del mejor modelo del inciso `d`?
 f) Ahora estudiaremos el efecto de la distribución previa. Para esto
 consideraremos. La variable de `edad` centrada y probaremos distintos polinomios
 como predictores. Consideraremos potencias desde 0 hasta términos de grado 6.
-Ajusta esta colección de posibles modelos. 
+Ajusta esta colección de posibles modelos.
 
 ```{r}
 poly(edad.centrado,2,raw=TRUE)
@@ -228,7 +228,7 @@ poly(edad.centrado,2,raw=TRUE)
 
 
 g) Para cada modelo en el inciso de arriba, genera gráficos que muestren las
-predicciones junto con las bandas de predicción. 
+predicciones junto con las bandas de predicción.
 
 
 
@@ -265,7 +265,7 @@ SEED <- 1234
 data_vinos <- read.table("vinos.txt", sep=";", header=TRUE)
 
 ## Creando columna con variable "score" centrada
-data_vinos <- data_vinos %>% 
+data_vinos <- data_vinos %>%
   mutate(
     score_c = score - mean(score)
   )
@@ -412,16 +412,16 @@ vinos fueron calificados como peores / mejores en promedio?
 
 ```{r}
 ## Revisión de la distribución
-# data_vinos %>% 
+# data_vinos %>%
 #   ggplot(
 #     aes(x=score)
 #   ) + geom_histogram()
 
 ## Ajuste de modelo
-m_2a <- stan_glm(score_c ~ judge + wine, 
+m_2a <- stan_glm(score_c ~ judge + wine,
                  prior=normal(0, 0.5),
-                 data=data_vinos, 
-                 seed=SEED, 
+                 data=data_vinos,
+                 seed=SEED,
                  refresh = 0,
                )
 # summary(m_2a)
@@ -450,7 +450,7 @@ y la comparación de devianza entre ambas posibilidades?
 ```{r}
 ## Ajustando con previa _default_
 m_2b1 <- stan_glm(
-  score ~ judge + wine, 
+  score ~ judge + wine,
   data=data_vinos
 )
 
@@ -459,7 +459,7 @@ print(m_2b1)
 bR2_m_2b1 <- bayes_R2(m_2b1)
 
 mcmc_hist(
-  data.frame(bR2_m_2b1), 
+  data.frame(bR2_m_2b1),
   binwidth=0.01
 )  +
   xlab('Bayesian R2 con previa _default_') +
@@ -471,8 +471,8 @@ mcmc_hist(
 ```{r}
 ## Ajustando con distribución a priori regularizada
 m_2b2 <- stan_glm(
-  score ~ judge + wine, 
-  data=data_vinos, 
+  score ~ judge + wine,
+  data=data_vinos,
   prior=hs()
 )
 
@@ -481,7 +481,7 @@ print(m_2b2)
 bR2_m_2b2 <- bayes_R2(m_2b2)
 
 mcmc_hist(
-  data.frame(bR2_m_2b2), 
+  data.frame(bR2_m_2b2),
   binwidth=0.01
 )  +
   xlab('Bayesian R2 con distribución a priori regularizada') +
@@ -499,10 +499,10 @@ estas estimaciones con lo que observaste en el inciso `a`?
 
 ```{r}
 ## Ajuste de modelo
-m_2c <- stan_glm(score_c ~ flight + wine.amer + judge.amer, 
+m_2c <- stan_glm(score_c ~ flight + wine.amer + judge.amer,
                  prior=normal(0, 0.5),
-                 data=data_vinos, 
-                 seed=SEED, 
+                 data=data_vinos,
+                 seed=SEED,
                  refresh = 0,
                )
 # summary(m_2a)
@@ -520,10 +520,10 @@ esta sección?
 
 ```{r}
 ## Ajuste de modelo
-m_2d <- stan_glm(score_c ~ flight + wine.amer + judge.amer + flight:wine.amer + flight:judge.amer + wine.amer:judge.amer, 
+m_2d <- stan_glm(score_c ~ flight + wine.amer + judge.amer + flight:wine.amer + flight:judge.amer + wine.amer:judge.amer,
                  prior=normal(0, 0.5),
-                 data=data_vinos, 
-                 seed=SEED, 
+                 data=data_vinos,
+                 seed=SEED,
                  refresh = 0,
                )
 # summary(m_2a)
@@ -534,18 +534,18 @@ mcmc_areas(m_2d)
 
 
 
-### Datos: 
+### Datos:
 
 Utiliza los datos en `nettle.txt` para evaluar la hipótesis de que la diversidad
-lingüística es producto de la seguridad alimentaria. Los datos contienen mediciones para: 
+lingüística es producto de la seguridad alimentaria. Los datos contienen mediciones para:
 
 1) `country`: Nombre del país.
 2) `num.lang`: Número de lenguajes identificados en dicho país.
 3) `area`: Area medida en kilómetros cuadrados.
-4) `k.pop`: Población en miles. 
-5) `num.stations`: Número de estaciones que proveen las siguientes. 
+4) `k.pop`: Población en miles.
+5) `num.stations`: Número de estaciones que proveen las siguientes.
 6) `mean.growing.season`: Duración promedio de la temporada de cosecha, medida
-en meses. 
+en meses.
 7) `sd.growing.season`: Desviación estándar de la duración de la
 temporada de cosecha, medidad en meses.
 
@@ -809,28 +809,3 @@ largas, la alta variación hace que el almacenamiento y la redistribución sean
 aún más importantes de lo que serían de otra manera. De esa manera, las personas
 pueden cooperar para preservar y proteger las ganancias inesperadas que se
 utilizarán durante las sequías.
-
-
-```{r, eval = FALSE}
-ggplot(data = data_centered, aes(x = centered.sd.growing.season*centered.mean.growing.season, y = log.leng.per.cap))  +
-    geom_abline(data = as_tibble(model_centered_4) %>% sample_frac(.2),
-                aes(slope = centered.sd.growing.season*centered.mean.growing.season, intercept = `(Intercept)`),
-                color = 'grey', alpha = .4) +
-    geom_abline(slope = coef(model_centered_4)[6], intercept = coef(model_centered_4)[1], color = 'salmon') +
-    geom_point()
-
-posterior_vs_prior(model_centered_4,pars= c("centered.mean.growing.season:centered.sd.growing.season"))
-
-as_tibble(model_centered_4)%>%
-    ggplot(aes(x = `centered.mean.growing.season:centered.sd.growing.season`)) +
-        geom_histogram() +
-        geom_vline(xintercept = coef(model_centered_4)[6], lty = 2) +
-        xlab("Valor del Coeficiente")+
-        ggtitle("Distribución posterior del Coeficiente")
-
-```
-
-```{r, eval = FALSE}
-posterior_interval(model_centered_4,pars= c("centered.mean.growing.season:centered.sd.growing.season"))
-```
-

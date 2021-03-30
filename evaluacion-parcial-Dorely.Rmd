@@ -1,0 +1,459 @@
+---
+title: "Examen parcial - Primavera 2021"
+author: Alfredo Garbuno Iñigo
+output: html_document
+---
+
+**Entrega:** 
+
+Enviar por correo electrónico una carpeta comprimida
+(`equipo-xx.zip`) que incluya datos y codigo de solución a mas tardar el 23 de
+Marzo antes de las 11:59pm (medianoche). El asunto deberá ser `[MB - 2021]
+Parcial Equipo XX`, donde  reemplazarás `XX` con el codigo de tu equipo. No se
+aceptarán entregas extemporáneas. Será mejor entregar un examen resuelto
+parcialmente, que no entregar nada.
+
+**Instrucciones:**
+  
+* Tus respuestas deben ser claras y debes explicar los resultados, incluye
+también tus procedimientos/código de manera ordenada, y el código comentado.
+
+* Se evaluará la presentación de resultados (calidad de las gráficas, tablas,
+...).
+
+* Las sesiones de dudas del Miércoles 17 de Marzo será completamente para
+responder dudas del examen. Adicionalmente, en las sesiones del Martes 16 y
+Jueves 18 se reservará una media hora para dudas (dependerá de la agenda cuál
+será el momento más oportuno para abrir el espacio).
+
+* No pueden compartir soluciones entre diferentes equipos.
+
+* Al entregar este examen afirmas que el trabajo se realizó sólo con tu
+compañeros de equipo. El material que utilizaste para apoyarte consistió de las
+notas en clase (pdfs en Canvas), el codigo fuente de las notas en el repositorio
+de Github.
+
+* Al entregar estás dando tu consentimiento para que bajo sospecha y suficiente
+evidencia de copia se anule tu evaluación.
+
+**Ponderación:**
+
+El examen está compuesto por tres apartados cuyo peso son los siguientes: 
+1. Datos !Kung San (60%)
+2. Datos Vinos     (25%)
+3. Datos Nettle    (15%)
+
+
+```{r setup, include=FALSE}
+library(tidymodels)
+library(tidyverse)
+library(cmdstanr)
+library(rstanarm)
+library(bayesplot)
+library(loo)
+library(patchwork)
+library(scales)
+library(ggplot2)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE, 
+                      fig.align = 'center', fig.width = 5, fig.height=3, cache = TRUE)
+comma <- function(x) format(x, digits = 2, big.mark = ",")
+theme_set(theme_linedraw())
+```
+
+## Datos: !Kung San.
+
+Los datos que tenemos en `Howell.csv` son datos parciales del censo para el
+área de Dobe, en particular para la población de los [!Kung
+San.](https://es.wikipedia.org/wiki/!Kung) Éstos fueron recopilados a partir de
+entrevistas realizadas por Nancy Howell a finales de la década de 1960.
+
+a ) Los pesos presentados a continuación se registraron en el censo !Kung, pero no
+se registraron las alturas para estas personas. Proporciona predicciones para
+las alturas e intervalos del 89% para cada uno de estos individuos basados en un
+modelo de regresión lineal.
+
+```{r}
+pesos<-tibble(peso = c(46.95, 43.72, 64.78, 32.59, 54.63))
+pesos
+```
+
+
+Dado que queremos generar predicciones para las alturas y sólo tenemos los pesos, decidimos utilizar un modelo de regresión lineal bajo un enfoque bayesiano utilizando como variable predictora el peso.
+
+```{r}
+datos1<-read_delim("howell.csv", delim = ";" ) #Cargamos los datos
+```
+
+Para lo cual, primero haremos un análisis exploratorio a los datos parciales del censo para conocer más al respecto.
+
+```{r}
+howell<-datos1
+head(howell)
+```
+
+Primero identificamos que nuestro conjunto de datos contiene únicamente 544 observaciones y 4 columnas. Donde la variable a predecir (altura) se encuentra en centímetros, el peso en kg, la edad en años y el género es un indicador de sexo masculino cuando toma el valor de 1.
+
+```{r}
+howell$genero<-factor(howell$genero) #Convertimos la variable a factor
+summary(howell)
+```
+
+Después vemos que la muestra contiene a personas de 0 a 88 años de edad con pesos que van de los 4 kilos a los 63. Sin embargo, llama nuestra atención que aunque la mediana de altura está alrededor de 1.5 metros, mediana de la edad corresponde a una persona adulta con 27 años de edad y 40 kg de peso. Lo anterior en el sentido de que si se tratara de una muestra en una población mexicana los pesos de los adultos serían más altos así como las alturas dado que en México somos una población donde la mayoría tiene sobrepeso u obesidad. Por ello, concluimos que no tenemos suficiente información preliminar para que podamos proponer distribuciones previas para los parámetros del modelo. De lo anterior, utilizamos el default de la distribución que proporciona stan_glm (una distribución poco informativa) para no sesgar nuestro modelo:
+
+```{r}
+SEED <- 2021
+set.seed(SEED)
+fit_1a <- stan_glm(altura ~ peso, data = howell, seed=SEED, refresh = 0)
+print(fit_1a)
+```
+
+Lo anterior nos dice que la predicción es precisa hasta más / menos 9.4 unidades que en este caso son centímetros.
+
+```{r}
+prior_summary(fit_1a)
+```
+
+Como comentamos, la distribución previa que utilizamos es la de default la cual parte de nuestra muestra de 544 observaciones. Esto es, para el intercepto utiliza la altura media de nuestros datos con una desviación estándar de 2.5 para el intercepto y el peso.
+
+```{r}
+summary(fit_1a)
+```
+
+
+Ahora utilizaremos la función posterior_predict() para calcular las predicciones de altura con base en los pesos de los 5 individuos bajo nuestro modelo de regresión ya que considera la incertidumbre asociada a los coeficientes del modelo y al error observacional (epsilon) incorporando sigma o el error aditivo.
+
+```{r}
+post_predict_1a<-as_tibble(posterior_predict(fit_1a, newdata=pesos,seed=SEED)) %>% 
+  #cada fila es una simulación bajo una muestra distinta
+  mutate(sample_id = 1:4000) %>% #creamos ID para cada
+  pivot_longer(cols = 1:5) %>%
+  mutate(name = fct_inorder(name)) %>% 
+  group_by(name) %>% #name la predicción de cada individuo (1-5)
+  summarise(altura_mean=mean(value), 
+            altura_median=median(value),
+            altura_low=quantile(value,.055), #intervalos del 89% de probabilidad
+            altura_hi=quantile(value,.945))
+
+post_predict_1a<-post_predict_1a %>%
+  mutate(pesos)
+
+post_predict_1a %>% mutate_if(is.numeric, ~round(., 1))
+```
+
+```{r}
+g_1a<-post_predict_1a %>%
+  ggplot(aes(peso,altura_mean)) +
+  geom_ribbon(aes(ymin=altura_low,ymax=altura_hi),alpha=.3)+
+  geom_line(color="red") + #sin_lineas +
+  geom_jitter(data=howell %>% filter(peso>30),
+              aes(peso,altura),
+              height = 0, width = 0.01, colour="black")
+g_1a
+```
+
+b) Ajusta un modelo lineal para personas menores de 18 años de edad utilizando
+como predictores la `edad` y el `peso`. Interpreta los coeficientes que resultan
+del modelo. Si consideras necesario centra los valores de las variables
+predictoras.
+
+Primero filtramos la muestra con las personas menores a 18 años
+
+```{r}
+menores.edad<-datos1 %>% filter(edad < 18)
+menores.edad$genero<-factor(menores.edad$genero) #Convertimos la variable a factor
+summary(menores.edad)
+```
+
+Calculamos un resumen con estadísticas de dispersión, en este caso la mediana de la edad es de sólo 7 años y la muestra se reduce a 192 observaciones: 92 varones y 100 mujeres. La altura promedio de los datos ahora es de sólo 108 centímetros o 1.08 metros.
+
+Posteriormente, centramos las variables alrededor de su media para poder dar una interpretación más sencilla al modelo lineal para predecir la altura:
+
+```{r, eval = FALSE}
+menores.edad<-menores.edad %>% mutate(peso.centrado=peso-mean(peso),
+                                      edad.centrada = edad-mean(edad))
+#AQUI HAY QUE CORREGIR UN ERROR PORQUE NO GUARDA EN menores.edad LAS NUEVAS VARIABLES peso.centrado y edad.centrada AUNQUE LAS MUESTRA EN HEAD
+
+head(menores.edad)
+```
+
+Y generamos el modelo con ambos predictores centrados:
+
+```{r}
+fit_1b <- stan_glm(altura ~ peso.centrado + edad.centrada, data = menores.edad, seed=SEED, refresh = 0)
+print(fit_1b)
+```
+
+Obtenemos un resumen del modelo:
+
+```{r}
+summary(fit_1b)
+```
+
+De los resultados anteriores, vemos que el intercepto representa la altura promedio de los menores de 18 años para una persona con un peso y edad alrededor del promedio la cual corresponde a 108 cm o 1.08 metros como vimos al inicio. Por otro lado, el peso y edad centrada tienen un coeficiente positivo en el modelo, lo cual indica para ambos predictores un incremento sobre el valor promedio centrado del peso y la edad contribuyen a un aumento sobre la predicción de la altura. En el caso del peso.centrado, por cada incremento de una unidad, predicción de la altura aumenta 1.4 cm la altura mientras que en la edad centrada por cada incremento de una unidad, la predicción de altura sube 2.3cm adicionales.
+
+c) Para el modelo resultante, haz gráficos que muestren la relación de la
+variable objetivo con los predictores. De igual forma, incorpora en la
+visualización la respuesta del modelo lineal junto con intervalos de predicción
+al 89\% y 97\%, de tal forma que incorpores la incertidumbre que se ha
+cuantificado en tu gráfico.
+
+```{r}
+g_1c_x1y<-menores.edad %>%
+  ggplot(aes(x=peso.centrado,y=altura)) +
+  geom_point()+
+  geom_smooth(method = "lm")
+
+g_1c_x2y<-menores.edad %>%
+  ggplot(aes(x=edad.centrada,y=altura)) +
+  geom_point()+
+  geom_smooth(method = "lm")
+
+#Preguntar aquí qué quiere exactamente
+
+g_1c_x1y+g_1c_x2y
+```
+Se aprecia una relación cercana a la lineal con ambos predictores.
+
+d) Supongamos que tenemos una amiga que es experta en
+[alometría](https://es.wikipedia.org/wiki/Alometr%C3%ADa) y les menciona que el
+peso es suficiente, pero que se debería de incorporar en términos de una escala
+logarítmica. Ajusta el modelo con todos las observaciones y compara con el
+modelo del inciso a) y un modelo adicional que sólo incorpora el `peso`. ¿Cuál
+parece tener mejor capacidad predictiva?
+
+```{r}
+howell<-howell %>%
+  mutate(log.peso = log(peso))
+
+
+#AQUI HAY QUE CORREGIR UN ERROR PORQUE NO GUARDA EN howell LA NUEVA VARIABLE log.peso AUNQUE LA MUESTRA EN HEAD
+
+head(howell)
+```
+Primero creamos la variable log.peso donde calculamos el logaritmo natural aplicado al peso sobre todas las observaciones de nuestra muestra.
+
+```{r}
+fit_1d_v1 <- stan_glm(altura ~ log.peso, data = howell, seed=SEED, refresh = 0)
+summary(fit_1d_v1)
+```
+
+Después de calcular este primer modelo, observamos que el coeficiente del intercepto es negativo. Por ello, se decidió centrar la variable de log.peso alrededor de la media de log.peso para generar una interpretación del modelo.
+
+```{r}
+howell<-howell %>%
+  mutate(log.peso.centrado = log.peso-mean(log.peso))
+
+#AQUI HAY QUE CORREGIR UN ERROR PORQUE NO GUARDA EN howell LA NUEVA VARIABLE log.peso.centrado AUNQUE LA MUESTRA EN HEAD
+
+head(howell)
+```
+
+```{r}
+fit_1d <- stan_glm(altura ~ log.peso.centrado, data = howell, seed=SEED, refresh = 0)
+summary(fit_1d)
+```
+
+Ya que el signo del coeficiente es positivo nos quedaremos con esta versión para compararla con el del inciso a. Es decir, utilizamos los criterios de información de los modelos para medir la capacidad predictiva del modelo del inciso a) y d) medimos qué tan bien predice cada modelo en datos que no se han observado por medio de la devianza y haciendo uso de validación cruzada con los métodos de waic y loo.
+
+Primero calculamos la devianza de ambos modelos con waic:
+
+```{r}
+waic_1a<-waic(fit_1a) #calcula: elpd_waic que corresponde a la log-densidad; p_waic: el número efectivo de parámetros; waic: la devianza del modelo así como suss errores estándar variando sobre todas las observaciones
+waic_1d<-waic(fit_1d)
+
+comparativo_waic_1d<-cbind(waic_1a,waic_1d)
+comparativo_waic_1d
+```
+
+Y los resultados arrojan que el modelo es el d) que incorpora el peso en escala logarítmica como predictor tiene un mejor desempeño ya que es el de menor devianza 3,330 en contraste con el del inciso a) 3,982.
+
+Luego generamos un comparativo en términos de la log-densidad predictiva con el método loo_compare.
+
+```{r}
+comparativo_diff_waic_1d<-loo_compare(waic_1a,waic_1d) #calcula comparativo de diferencia en términos de la log-densidad predictiva y un error estándar sobre esta diferencia (se_diff). Ordenando los modelos del mejor al peor
+comparativo_diff_waic_1d
+```
+
+Estos resultados también identifican al modelo del inciso d como el mejor pues tiene una mayor log-densidad predictiva. Además se aprecia una diferencia relativamente grande en la log-densidad predictiva y el error estándar del modelo d con respecto al del inciso a.
+
+Por último comparamos los modelos con validación cruzada:
+
+```{r}
+loo_1a<-loo(fit_1a) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1a
+```
+
+```{r}
+loo_1d<-loo(fit_1d)
+loo_1d
+```
+En ambos casos, el diagnóstico que loo arroja es que podemos usar dicho criterio y además las estadísticas coinciden con las obtenidas con el método waic. Por lo que la conclusión no cambia, el mejor modelo también resulta ser el del inciso d bajo esta comparación.
+
+```{r}
+comparativo_diff_loo_1d<-loo_compare(loo_1a,loo_1d) #calcula comparativo de diferencia en términos de la log-densidad predictiva y un error estándar sobre esta diferencia (se_diff). Ordenando los modelos del mejor al peor
+comparativo_diff_loo_1d
+```
+
+e) ¿Cómo interpretas los coeficientes del mejor modelo del inciso `d`?
+
+Como ya mencionamos, el mejor modelo para la predicción de la variable altura fue el d: altura ~ log.peso.centrado, donde utilizamos la variable log(peso) que fue centrada alrededor de su media. Primero mostramos los coeficientes de este modelo:
+
+```{r}
+print(fit_1d)
+```
+
+De lo anterior se interpreta al intercepto de 138.3 como la estimación para la altura promedio en centímetros de un individuo promedio con un log.peso.centrado promedio (log-kg). El valor del coeficiente $\beta_1$ para la log.peso.centrado de 47.1 significa que un incremento de una unidad en la variable log.peso.centrado aumenta 47.1 cm la predicción sobre la altura del individuo.
+
+f) Ahora estudiaremos el efecto de la distribución previa. Para esto
+consideraremos. La variable de `edad` centrada y probaremos distintos polinomios
+como predictores. Consideraremos potencias desde 0 hasta términos de grado 6.
+Ajusta esta colección de posibles modelos. 
+
+Primero calculamos la variable edad.centrada centrando la variable edad alrededor de su media:
+
+```{r}
+howell.centrado<-datos1 %>% 
+  mutate(edad.centrada = edad-mean(edad))
+howell.centrado$genero<-factor(howell$genero) #Convertimos la variable a factor
+head(howell.centrado)
+```
+
+Luego ajustamos 7 modelos para la altura usando como predictores a la edad.centrada en forma de polinomios desde el grado 0 a 6.
+
+```{r}
+fit_1f_g0 <- stan_glm(altura ~ 1, data = howell.centrado, seed=SEED, refresh = 0)
+fit_1f_g1 <- stan_glm(altura ~ poly(edad.centrada,1,raw=TRUE), data = howell.centrado, seed=SEED, refresh = 0)
+fit_1f_g2 <- stan_glm(altura ~ poly(edad.centrada,2,raw=TRUE), data = howell.centrado, seed=SEED, refresh = 0)
+fit_1f_g3 <- stan_glm(altura ~ poly(edad.centrada,3,raw=TRUE), data = howell.centrado, seed=SEED, refresh = 0)
+fit_1f_g4 <- stan_glm(altura ~ poly(edad.centrada,4,raw=TRUE), data = howell.centrado, seed=SEED, refresh = 0)
+fit_1f_g5 <- stan_glm(altura ~ poly(edad.centrada,5,raw=TRUE), data = howell.centrado, seed=SEED, refresh = 0)
+fit_1f_g6 <- stan_glm(altura ~ poly(edad.centrada,6,raw=TRUE), data = howell.centrado, seed=SEED, refresh = 0)
+```
+
+Y a continuación mostramos el resumen de cada modelo:
+
+```{r}
+summary(fit_1f_g0)
+```
+
+```{r}
+summary(fit_1f_g1)
+```
+
+```{r}
+summary(fit_1f_g2)
+```
+
+```{r}
+summary(fit_1f_g3)
+```
+
+```{r}
+summary(fit_1f_g4)
+```
+
+```{r}
+summary(fit_1f_g5)
+```
+
+```{r}
+summary(fit_1f_g6)
+```
+
+g) Para cada modelo en el inciso de arriba, genera gráficos que muestren las
+predicciones junto con las bandas de predicción. 
+
+```{r}
+#Preguntar aquí qué quiere exactamente
+bandas_coef_1g<-posterior_interval(fit_1f_g0, prob = 0.89)
+bandas_coef_1g
+```
+
+h) Realiza una evaluación de los modelos resultantes con el criterio de
+información que consideres más apropiado.
+
+Para la evaluación de modelos nos basaremos en los criterios de información a través de los métodos waic y loo como en los resultados previos así como en el principio de parsimonia (se prefiere el modelo más sencillo posible).
+
+```{r}
+waic_1h_g0<-waic(fit_1f_g0) #calcula: elpd_waic que corresponde a la log-densidad; p_waic: el número efectivo de parámetros; waic: la devianza del modelo así como suss errores estándar variando sobre todas las observaciones
+waic_1h_g1<-waic(fit_1f_g1)
+waic_1h_g2<-waic(fit_1f_g2)
+waic_1h_g3<-waic(fit_1f_g3)
+waic_1h_g4<-waic(fit_1f_g4)
+waic_1h_g5<-waic(fit_1f_g5)
+waic_1h_g6<-waic(fit_1f_g6)
+
+comparativo_waic_1h<-cbind(waic_1h_g0,waic_1h_g1,waic_1h_g2,waic_1h_g3,waic_1h_g4,waic_1h_g5,waic_1h_g6)
+comparativo_waic_1h
+```
+
+Y los resultados arrojan que los modelos que utilizan como predictores a los polinomios de grado 4 a 6 tienen la menor devianza y como el error estándar de waic es de 33 aproximadamente, no podríamos dar una conclusión definitiva sobre cuál de estos 3 es el mejor con este criterio.
+
+### FALTA AGREGAR UN COMENTARIO SOBRE p_waic: el número efectivo de parámetros
+
+Luego generamos un comparativo en términos de la log-densidad predictiva con el método loo_compare.
+
+```{r}
+comparativo_diff_waic_1g<-loo_compare(waic_1h_g0,waic_1h_g1,waic_1h_g2,waic_1h_g3,waic_1h_g4,waic_1h_g5,waic_1h_g6) #calcula comparativo de diferencia en términos de la log-densidad predictiva y un error estándar sobre esta diferencia (se_diff). Ordenando los modelos del mejor al peor
+comparativo_diff_waic_1g
+```
+
+Si bien estos resultadoscolocan en primer posición al modelo con el polinomio de grado 6, el polinomio de grado 4 y 5 tienen una log-densidad predictiva muy cercana, además dado el error estándar de la diferencia que tienen es posible que el modelo 5 o 4 sea el mejor. 
+
+Procederemos a hacer la comparación de los modelos con validación cruzada:
+
+```{r}
+loo_1g_g0<-loo(fit_1f_g0) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1g_g0
+```
+```{r}
+loo_1g_g1<-loo(fit_1f_g1) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1g_g1
+```
+```{r}
+loo_1g_g2<-loo(fit_1f_g2) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1g_g2
+```
+
+```{r}
+loo_1g_g3<-loo(fit_1f_g3) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1g_g3
+```
+
+```{r}
+loo_1g_g4<-loo(fit_1f_g4) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1g_g4
+```
+
+```{r}
+loo_1g_g5<-loo(fit_1f_g5) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1g_g5
+```
+
+```{r}
+loo_1g_g6<-loo(fit_1f_g6) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1g_g6
+```
+
+El diagnóstico que loo arroja es: "All Pareto k estimates are good (k < 0.5)." sólo en el modelo con polinomio grado 6 indica: "All Pareto k estimates are ok (k < 0.7)." por lo que decidimos usar dicho criterio. 
+
+```{r}
+comparativo_diff_loo_1g<-loo_compare(loo_1g_g0,loo_1g_g1,loo_1g_g2,loo_1g_g3,loo_1g_g4,loo_1g_g5,loo_1g_g6) #calcula comparativo de diferencia en términos de la log-densidad predictiva y un error estándar sobre esta diferencia (se_diff). Ordenando los modelos del mejor al peor
+comparativo_diff_loo_1g
+```
+
+Observamos que las estadísticas de la diferencia en términos de la log-densidad predictiva se mantienen similares a las de waic. Bajo esta comparación, seguimos identficando a los modelos con polinomios de grado 4, 5 y 6 con los mejores desempeños. Por ello, escogemos como el mejor modelo al que incorpora como predictores a la edad.centrada como un polinomio de grado 4 por el principio de parsimonia.
+
+i) Ahora ajustaremos un polinomio de grado 6 pero incorporaremos distribuciones
+previas mas restrictivas. Es decir, considera que $\beta_k \sim \mathsf{N}(0,
+\sqrt{5})$ para toda $k.$ Nota que la desviación estandar es $\sqrt{5}.$ Evalúa
+el criterio de información que utilizaste en el inciso anterior, y compara la
+estimación de número efectivo de parámetros. ¿Por qué crees que sucede esto?
+
+compara la estimación de número efectivo de parámetros (cómo cambia)
+
+### FALTA AGREGAR UN COMENTARIO SOBRE p_waic: el número efectivo de parámetros
+
+```{r}
+
+```
