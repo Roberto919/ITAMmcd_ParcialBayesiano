@@ -45,6 +45,9 @@ El examen está compuesto por tres apartados cuyo peso son los siguientes:
 
 
 ```{r setup, include=FALSE}
+install.packages("tidybayes")
+library(modelr)
+library(tidybayes)
 library(tidymodels)
 library(tidyverse)
 library(cmdstanr)
@@ -98,7 +101,7 @@ howell$genero<-factor(howell$genero) #Convertimos la variable a factor
 summary(howell)
 ```
 
-Después vemos que la muestra contiene a personas de 0 a 88 años de edad con pesos que van de los 4 kilos a los 63. Sin embargo, llama nuestra atención que aunque la mediana de altura está alrededor de 1.5 metros, mediana de la edad corresponde a una persona adulta con 27 años de edad y 40 kg de peso. Lo anterior en el sentido de que si se tratara de una muestra en una población mexicana los pesos de los adultos serían más altos así como las alturas dado que en México somos una población donde la mayoría tiene sobrepeso u obesidad. Por ello, concluimos que no tenemos suficiente información preliminar para que podamos proponer distribuciones previas para los parámetros del modelo. De lo anterior, utilizamos el default de la distribución que proporciona stan_glm (una distribución poco informativa) para no sesgar nuestro modelo:
+Después vemos que la muestra contiene a personas de 0 a 88 años de edad con pesos que van de los 4 kilos a los 63. Sin embargo, llama nuestra atención que aunque la mediana de altura está alrededor de 1.5 metros, mediana de la edad corresponde a una persona adulta con 27 años de edad y 40 kg de peso. Para definir la distribución previa de los parámetros, decidimos que no tenemos suficiente conocimiento previo para poder definirla con claridad.  De lo anterior, utilizamos el default de la distribución que proporciona stan_glm (una distribución poco informativa) para no sesgar nuestro modelo, asumindo distribuciones previas normales. 
 
 ```{r}
 SEED <- 2021
@@ -191,6 +194,13 @@ summary(fit_1b)
 
 De los resultados anteriores, vemos que el intercepto representa la altura promedio de los menores de 18 años para una persona con un peso y edad alrededor del promedio la cual corresponde a 108 cm o 1.08 metros como vimos al inicio. Por otro lado, el peso y edad centrada tienen un coeficiente positivo en el modelo, lo cual indica para ambos predictores un incremento sobre el valor promedio centrado del peso y la edad contribuyen a un aumento sobre la predicción de la altura. En el caso del peso.centrado, por cada incremento de una unidad, predicción de la altura aumenta 1.4 cm la altura mientras que en la edad centrada por cada incremento de una unidad, la predicción de altura sube 2.3cm adicionales.
 
+Para un modelo centrado, tenemos lo siguiente:
+
+$$ y = \beta_0 + \beta_1*(x_1 - \bar{x}_1)+\beta_2*(x_2 - \bar{x}_2 )+ \epsilon$$ 
+
+Por lo tanto $\beta_i$ puede interpretarse como el cambio en $y$ dado un aumento de una unidad en $x_i$
+
+
 c) Para el modelo resultante, haz gráficos que muestren la relación de la
 variable objetivo con los predictores. De igual forma, incorpora en la
 visualización la respuesta del modelo lineal junto con intervalos de predicción
@@ -211,6 +221,14 @@ g_1c_x2y<-menores.edad %>%
 #Preguntar aquí qué quiere exactamente
 
 g_1c_x1y+g_1c_x2y
+```
+```{r}
+ggplot(data = menores.edad, aes(x = peso.centrado, y = altura))  + 
+    geom_abline(data = as_tibble(fit_1b) %>% sample_frac(.2), 
+                aes(slope = peso.centrado, intercept = `(Intercept)`), 
+                color = 'grey', alpha = .4) + 
+    geom_abline(slope = coef(fit_1b)[2], intercept = coef(fit_1b)[1], color = 'salmon') + 
+    geom_point()
 ```
 Se aprecia una relación cercana a la lineal con ambos predictores.
 
@@ -364,9 +382,73 @@ g) Para cada modelo en el inciso de arriba, genera gráficos que muestren las
 predicciones junto con las bandas de predicción. 
 
 ```{r}
-#Preguntar aquí qué quiere exactamente
-bandas_coef_1g<-posterior_interval(fit_1f_g0, prob = 0.89)
-bandas_coef_1g
+
+df4plot<-function(model){
+  edad.centrada<-tibble(seq(-40,70))
+  colnames(edad.centrada)<-"edad.centrada"
+  df<-as_tibble(posterior_predict(model, newdata=edad.centrada,seed=SEED)) %>% 
+  #cada fila es una simulación bajo una muestra distinta
+  mutate(sample_id = 1:4000) %>% #creamos ID para cada
+  pivot_longer(cols = 1:nrow(edad.centrada)) %>%
+  mutate(name = fct_inorder(name)) %>% 
+  group_by(name) %>% #name la predicción de cada individuo (1-5)
+  summarise(altura_mean=mean(value), 
+            altura_median=median(value),
+            altura_low=quantile(value,.055), #intervalos del 89% de probabilidad
+            altura_hi=quantile(value,.945))
+df$edad.centrada<-as_vector(edad.centrada)
+return(df)
+}
+
+
+plots<-function(df,points,title){
+  
+  g_points <-geom_point(data= points, aes(edad.centrada,altura),alpha=.1)
+  
+  g_1a<-df %>%
+    ggplot(aes(edad.centrada,altura_mean)) +
+    geom_ribbon(aes(ymin=altura_low,ymax=altura_hi),alpha=.3)+
+    geom_line(color="red") +
+    ggtitle(title)
+  
+  g_1a+g_points
+}
+
+```
+
+```{r}
+
+
+
+post_predict_1f_g0 <- df4plot(fit_1f_g0)
+post_predict_1f_g1 <- df4plot(fit_1f_g1)
+post_predict_1f_g2 <- df4plot(fit_1f_g2)
+post_predict_1f_g3 <- df4plot(fit_1f_g3)
+post_predict_1f_g4 <- df4plot(fit_1f_g4)
+post_predict_1f_g5 <- df4plot(fit_1f_g5)
+post_predict_1f_g6 <- df4plot(fit_1f_g6)
+
+```
+
+```{r}
+
+
+
+plots(post_predict_1f_g0,howell.centrado,"Polinomio grado 0 (I.C. 89%)")
+
+plots(post_predict_1f_g1,howell.centrado,"Polinomio grado 1 (I.C. 89%)")
+
+plots(post_predict_1f_g2,howell.centrado,"Polinomio grado 2 (I.C. 89%)")
+
+plots(post_predict_1f_g3,howell.centrado,"Polinomio grado 3 (I.C. 89%)")
+
+plots(post_predict_1f_g4,howell.centrado,"Polinomio grado 4 (I.C. 89%)")
+
+plots(post_predict_1f_g5,howell.centrado,"Polinomio grado 5 (I.C. 89%)")
+
+plots(post_predict_1f_g6,howell.centrado,"Polinomio grado 6 (I.C. 89%)")
+
+
 ```
 
 h) Realiza una evaluación de los modelos resultantes con el criterio de
