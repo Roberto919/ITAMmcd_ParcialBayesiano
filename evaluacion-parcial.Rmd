@@ -312,12 +312,14 @@ cat("\n")
 bx1 <- data_vinos %>%
     ggplot(
         aes(score)
-    ) + geom_histogram()
+    ) + geom_histogram(fill="orange") +
+  labs(title="Score original")
 
 bx2 <- data_vinos %>%
     ggplot(
         aes(score_c)
-    ) + geom_histogram()
+    ) + geom_histogram(fill="green") +
+  labs(title="Score ajustado")
 
 bx1 + bx2
 ```
