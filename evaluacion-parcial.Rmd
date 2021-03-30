@@ -290,12 +290,12 @@ unique(data_vinos$judge.amer)
 bx1 <- data_vinos %>%
     ggplot(
         aes(score)
-    ) + geom_boxplot()
+    ) + geom_histogram()
 
 bx2 <- data_vinos %>%
     ggplot(
         aes(score_c)
-    ) + geom_boxplot()
+    ) + geom_histogram()
 
 bx1 + bx2
 ```
@@ -305,15 +305,40 @@ bx1 + bx2
 
 
 ### Evaluación del comportamiento de los datos
+
 ```{r}
-## Exploración de calificaciones según el tipo de vino
+## Exploración de calificaciones según los jueces (judge)
+data_vinos %>% 
+  group_by(judge) %>% 
+  summarise(
+    mean(score_c),
+    n(),
+    max(score_c),
+    min(score_c)
+  )
+```
+
+```{r}
+## Exploración de calificaciones según el vino (wine)
+data_vinos %>% 
+  group_by(wine) %>% 
+  summarise(
+    mean(score_c),
+    n(),
+    max(score_c),
+    min(score_c)
+  )
+```
+
+```{r}
+## Exploración de calificaciones según el tipo de vino (flight)
 data_vinos %>%
   group_by(flight) %>%
   summarise(
-    mean(score),
+    mean(score_c),
     n(),
-    max(score),
-    min(score)
+    max(score_c),
+    min(score_c)
   )
 
 t.test(
@@ -325,7 +350,7 @@ t.test(
 
 
 ```{r}
-## Exploración de las calificaciones por el origen del vino
+## Exploración de las calificaciones por el origen del vino (wine.amer)
 data_vinos %>%
   group_by(wine.amer) %>%
   summarise(
@@ -342,7 +367,7 @@ t.test(filter(data_vinos, wine.amer == 0)$score, filter(data_vinos, wine.amer ==
 
 
 ```{r}
-## Evaluar si hay alguna diferencia importante entre los vinos según origen y tipo
+## Evaluar si hay alguna diferencia importante entre los vinos según origen y tipo (wine.amer + flight)
 data_vinos %>%
   group_by(wine.amer, flight) %>%
   summarise(
@@ -410,12 +435,8 @@ jueces individuales y vinos individuales? ¿Notas algún patrón (puedes utiliza
 `mcmc_areas`)? ¿Qué jueces dieron las calificaciones más altas / más bajas? ¿Qué
 vinos fueron calificados como peores / mejores en promedio?
 
+
 ```{r}
-## Revisión de la distribución
-# data_vinos %>%
-#   ggplot(
-#     aes(x=score)
-#   ) + geom_histogram()
 
 ## Ajuste de modelo
 m_2a <- stan_glm(score_c ~ judge + wine,
@@ -427,14 +448,14 @@ m_2a <- stan_glm(score_c ~ judge + wine,
 # summary(m_2a)
 print(m_2a)
 ```
+**Para este problema se optó por usar una distribución _a priori_ normal con media en 0 y desviación estándar 0.5**
 
 
 ```{r}
-mcmc_areas(
-  m_2a
-)
+mcmc_areas(m_2a)
 ```
-**Esta visualización nos permite visualizar la estimación de los intervalos posterior.**
+**Esta visualización nos permite ver la estimación de los intervalos posterior, con la cual podemos hacer las siguientes observaciones:**
+**1. **
 
 
 
