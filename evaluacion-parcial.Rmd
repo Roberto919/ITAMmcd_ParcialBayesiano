@@ -61,7 +61,8 @@ library(ggplot2) #genera gráficos
 library(ggpubr)
 library(psych) #graficación
 library(psych)
-knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE, 
+library(MASS)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE,
                       fig.align = 'center', fig.width = 5, fig.height=3, cache = TRUE)
 comma <- function(x) format(x, digits = 2, big.mark = ",")
 theme_set(theme_linedraw())
@@ -82,8 +83,8 @@ modelo de regresión lineal.
 ### Respuesta:
 
 ```{r}
-pesos<-tibble(peso = c(46.95, 43.72, 64.78, 32.59, 54.63))
-pesos
+peso<-tibble(peso = c(46.95, 43.72, 64.78, 32.59, 54.63))
+peso
 ```
 
 
@@ -159,10 +160,10 @@ g_1a<-post_predict_1a %>% #usamos las predicciones que obtuvimos con la función
   ggplot(aes(peso,altura_prom)) + #graficamos peso vs altura_prom
   geom_ribbon(aes(ymin=altura_lim_inf,ymax=altura_lim_sup),fill = "grey70",alpha=.3) + #bandas de predicción
   geom_line(color="red") + #media de predicciones
-  geom_jitter(data=howell %>% filter(peso>32), #agregamos los datos de la muestra filtrándolas con peso mayor a 32 
+  geom_jitter(data=howell %>% filter(peso>32), #agregamos los datos de la muestra filtrándolas con peso mayor a 32
               aes(peso,altura),
               height = 0, width = 0.01, colour="darkblue") +
-  labs(title = "Predicciones del modelo lineal altura ~ peso I=89%") + 
+  labs(title = "Predicciones del modelo lineal altura ~ peso I=89%") +
   labs(y = "altura")
 g_1a
 ```
@@ -220,7 +221,7 @@ cuantificado en tu gráfico.
 
 ```{r}
 #Gráfico Dispersión altura vs predictor 1: peso.centrado
-g_1c_altura_peso.centrado<-menores.edad %>% 
+g_1c_altura_peso.centrado<-menores.edad %>%
   ggplot(aes(x=peso.centrado,y=altura)) +
   geom_point()+
   geom_smooth(method = "lm")+
@@ -234,20 +235,20 @@ g_1c_altura_edad.centrada<-menores.edad %>%
   labs(title = "Altura vs predictor 2")
 
 #Gráfico altura vs predictor 1: peso.centrado
-g_1c_altura_pred_peso<-ggplot(data = menores.edad, aes(x = peso.centrado, y = altura))  + 
-    geom_abline(data = as_tibble(fit_1b) %>% sample_frac(.2), 
-                aes(slope = peso.centrado, intercept = `(Intercept)`), 
-                color = 'grey', alpha = .4) + 
-    geom_abline(slope = coef(fit_1b)[2], intercept = coef(fit_1b)[1], color = 'salmon') + 
+g_1c_altura_pred_peso<-ggplot(data = menores.edad, aes(x = peso.centrado, y = altura))  +
+    geom_abline(data = as_tibble(fit_1b) %>% sample_frac(.2),
+                aes(slope = peso.centrado, intercept = `(Intercept)`),
+                color = 'grey', alpha = .4) +
+    geom_abline(slope = coef(fit_1b)[2], intercept = coef(fit_1b)[1], color = 'salmon') +
     geom_point()+
   labs(title = "Altura vs respuesta 1")
 
 #Gráfico altura vs predictor 2: edad.centrada
-g_1c_altura_pred_edad<-ggplot(data = menores.edad, aes(x = edad.centrada, y = altura))  + 
-    geom_abline(data = as_tibble(fit_1b) %>% sample_frac(.2), 
-                aes(slope = edad.centrada, intercept = `(Intercept)`), 
-                color = 'grey', alpha = .4) + 
-    geom_abline(slope = coef(fit_1b)[1], intercept = coef(fit_1b)[2], color = 'salmon') + 
+g_1c_altura_pred_edad<-ggplot(data = menores.edad, aes(x = edad.centrada, y = altura))  +
+    geom_abline(data = as_tibble(fit_1b) %>% sample_frac(.2),
+                aes(slope = edad.centrada, intercept = `(Intercept)`),
+                color = 'grey', alpha = .4) +
+    geom_abline(slope = coef(fit_1b)[1], intercept = coef(fit_1b)[2], color = 'salmon') +
     geom_point()+
   labs(title = "Altura vs respuesta 2")
 
@@ -267,7 +268,7 @@ parece tener mejor capacidad predictiva?
 Primero creamos la variable log.peso donde calculamos el logaritmo natural aplicado al peso sobre todas las observaciones de nuestra muestra.
 
 ```{r}
-howell<-howell %>% 
+howell<-howell %>%
   mutate(log.peso = log(peso)) #creamos la variable log.peso aplicando el logaritmo natural al peso
 
 head(howell) #imprimimos las primeras observaciones
@@ -322,12 +323,12 @@ Por último comparamos los modelos con validación cruzada mediante la función 
 
 ```{r}
 loo_1a<-loo(fit_1a) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
-loo_1a #imprime resultados 
+loo_1a #imprime resultados
 ```
 
 ```{r}
 loo_1d<-loo(fit_1d) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
-loo_1d #imprime resultados 
+loo_1d #imprime resultados
 ```
 En ambos casos, el diagnóstico que loo arroja es que ambos modelos son buenos y además notamos que las estadísticas coinciden con las obtenidas con el método waic. Por lo que la conclusión no cambia, el mejor modelo también se determina que el modelo del inciso d) es el mejor bajo esta comparación.
 
@@ -335,6 +336,7 @@ En ambos casos, el diagnóstico que loo arroja es que ambos modelos son buenos y
 comparativo_diff_loo_1d<-loo_compare(loo_1a,loo_1d) #calcula comparativo de diferencia en términos de la log-densidad predictiva y un error estándar sobre esta diferencia (se_diff). Ordenando los modelos del mejor al peor
 comparativo_diff_loo_1d #imprime comparativo
 ```
+
 
 e) ¿Cómo interpretas los coeficientes del mejor modelo del inciso `d`?
 
@@ -358,7 +360,7 @@ Ajusta esta colección de posibles modelos.
 Primero calculamos la variable edad.centrada centrando la variable edad alrededor de su media:
 
 ```{r}
-howell.centrado<-datos1 %>% 
+howell.centrado<-datos1 %>%
   mutate(edad.centrada = edad-mean(edad)) #creamos la variable edad.centrada centrando la variable edad por su media
 howell.centrado$genero<-factor(howell$genero) #convertimos la variable a factor
 head(howell.centrado) #imprimimos las primeras observaciones
@@ -423,7 +425,7 @@ df4plot<-function(model){
   #cada fila es una simulación bajo una muestra distinta
   mutate(sample_id = 1:4000) %>% #creamos ID para cada
   pivot_longer(cols = 1:nrow(edad.centrada)) %>%
-  mutate(name = fct_inorder(name)) %>% 
+  mutate(name = fct_inorder(name)) %>%
   group_by(name) %>% #name es la predicción de cada individuo (1-5)
   summarise(altura_mean=mean(value), #calcula media
             altura_median=median(value), #calcula mediana
@@ -442,14 +444,14 @@ plots<-function(df,points,title){
     geom_line(color="red") + #media de predicciones
     ggtitle(title)+
     ylab("altura")
-  
+
   g_1a+g_points
 }
 ```
 
 ```{r}
 #guardamos predicciones
-post_predict_1f_g0 <- df4plot(fit_1f_g0) 
+post_predict_1f_g0 <- df4plot(fit_1f_g0)
 post_predict_1f_g1 <- df4plot(fit_1f_g1)
 post_predict_1f_g2 <- df4plot(fit_1f_g2)
 post_predict_1f_g3 <- df4plot(fit_1f_g3)
@@ -682,7 +684,7 @@ data_vinos <- data_vinos %>%
     score_c = score - mean(score),
     judge = ifelse(judge.amer == 1, paste0(judge, " (AM)"), paste0(judge, " (FR)")),
     wine = ifelse(wine.amer == 1, paste0(wine, " (AM)"), paste0(wine, " (FR)")),
-  ) %>% 
+  ) %>%
   mutate(
     wine = ifelse(flight == "white", paste0(wine, " - white"), paste0(wine, " - red")),
   )
@@ -743,27 +745,27 @@ bx1 + bx2
 
 ```{r}
 ## Exploración de calificaciones según los jueces (judge)
-data_vinos %>% 
-  group_by(judge) %>% 
+data_vinos %>%
+  group_by(judge) %>%
   summarise(
     mean = mean(score_c),
     n(),
     max(score_c),
     min(score_c)
-  ) %>% 
+  ) %>%
   arrange(mean)
 ```
 
 ```{r}
 ## Exploración de calificaciones según el vino (wine)
-data_vinos %>% 
-  group_by(wine) %>% 
+data_vinos %>%
+  group_by(wine) %>%
   summarise(
     mean = mean(score_c),
     n(),
     max(score_c),
     min(score_c)
-  ) %>% 
+  ) %>%
   arrange(desc(mean))
 ```
 
@@ -792,9 +794,9 @@ data_vinos %>%
   group_by(wine.amer) %>%
   summarise(
     n(),
-    mean(score),
-    min(score),
-    max(score)
+    mean(score_c),
+    min(score_c),
+    max(score_c)
   )
 
 t.test(filter(data_vinos, wine.amer == 0)$score, filter(data_vinos, wine.amer == 1)$score)
@@ -809,9 +811,9 @@ data_vinos %>%
   group_by(wine.amer, flight) %>%
   summarise(
     n(),
-    mean(score),
-    min(score),
-    max(score)
+    mean(score_c),
+    min(score_c),
+    max(score_c)
   )
 ```
 
@@ -829,14 +831,14 @@ nonamer_red <- data.frame(
   type = "rojo_no_americano"
 )
 
-rbind(amer_red, nonamer_red) %>% 
+rbind(amer_red, nonamer_red) %>%
   ggplot(
-    aes(x=score, color=type)
-  ) + geom_histogram(fill="white") + 
+    aes(x=score_c, color=type)
+  ) + geom_histogram(fill="white") +
   labs(title="Comparación de vinos (rojos) según su origen")
-  
 
-t.test(filter(data_vinos, wine.amer == 1, flight == "red")$score, filter(data_vinos, wine.amer == 0, flight == "red")$score)
+
+t.test(filter(data_vinos, wine.amer == 1, flight == "red")$score_c, filter(data_vinos, wine.amer == 0, flight == "red")$score_c)
 ```
 **El resultado de la prueba Welch indica que sí hay una diferencia estadísticamente significativa (asumiendo un valor-p límite de 0.05) en el score de los vinos rojos dependiendo de su origen.**
 
@@ -854,14 +856,14 @@ nonamer_white <- data.frame(
   type = "blanco_no_americano"
 )
 
-rbind(amer_white, nonamer_white) %>% 
+rbind(amer_white, nonamer_white) %>%
   ggplot(
-    aes(x=score, color=type)
-  ) + geom_histogram(fill="white") + 
+    aes(x=score_c, color=type)
+  ) + geom_histogram(fill="white") +
   labs(title="Comparación de vinos (blancos) según su origen")
-  
 
-t.test(filter(data_vinos, wine.amer == 1, flight == "white")$score, filter(data_vinos, wine.amer == 0, flight == "white")$score)
+
+t.test(filter(data_vinos, wine.amer == 1, flight == "white")$score_c, filter(data_vinos, wine.amer == 0, flight == "white")$score_c)
 ```
 **Aquí obsservamos que no hay una diferencia estadísticamente significativa en los vinos blancos dependiendo de su origen.**
 
@@ -887,6 +889,10 @@ t.test(amer_judge, nonamer_judge)
 
 
 
+```{r}
+data_vinos
+```
+
 a) En este inciso, sólo considera la variación entre jueces y
 vinos. Ajusta un modelo de regresión lineal utilizando estos predictores.
 Justifica tu distribución _a priori_. ¿Cómo interpretas la variación entre
@@ -894,41 +900,50 @@ jueces individuales y vinos individuales? ¿Notas algún patrón (puedes utiliza
 `mcmc_areas`)? ¿Qué jueces dieron las calificaciones más altas / más bajas? ¿Qué
 vinos fueron calificados como peores / mejores en promedio?
 
+**Con el fin de tener una mejor idea de la distribución _a priori_ que podríamos usar para nuestro modelo, optamos por ajustar un modelo lineal para poder tener más información de los posibles valores que podrían tomar los coeficientes**
 ```{r}
-m_1a <- lm(score_c ~ judge + wine,
-                 prior=normal(0, 0.5),
-                 data=data_vinos,
-                 seed=SEED,
-                 refresh = 0,
-               )
-# summary(m_2a)
-print(m_1a)
-```
-
-
-
-```{r}
-
-## Ajuste de modelo
 m_2a <- stan_glm(score_c ~ judge + wine,
-                 prior=normal(0, 0.5),
                  data=data_vinos,
                  seed=SEED,
                  refresh = 0,
                )
-# summary(m_2a)
+
 print(m_2a)
 ```
-**Para este problema se optó por usar una distribución _a priori_ normal con media en 0 y desviación estándar 0.5**
+
+```{r}
+## Exploración de los coeficientes para definir distribución a priori.
+hist(m_1a$coefficients)
+MASS::fitdistr(m_1a$coefficients, "normal")
+```
+
+
+**Con base en los resultados de este modelo, optamos por usar como distribución _a priori_ una distribución normal con media en -0.01 y desviación estándar de 1.24**
+
+```{r}
+## Ajuste de modelo con distribución _a priori_ seleccionada.
+m_2a <- stan_glm(score_c ~ judge + wine,
+                 prior=normal(-0.1, 1.24),
+                 data=data_vinos,
+                 seed=SEED,
+                 refresh = 0,
+               )
+
+print(m_2a)
+```
 
 
 ```{r}
 mcmc_areas(m_2a)
 ```
-**Esta visualización nos permite ver la estimación de los intervalos posterior, con la cual podemos hacer las siguientes observaciones:**
-**1. Los jueces con una desviación positiva fueron menos estrictos al momento de dar una calificación que los juecs que muestran una desviación negativa. Por lo tanto, podemos observar que los jueces más estrictos fueron Jean-M Cardepat y Robert Hodgson.**
-**2. Similar al tema de los jueces, los vinos que tuvieron una desviación negativa fueron los más penalizados, mientras que los que mostraron una desviación positiva fueron los más reconocidos. A diferencia del tema de los jueces, vemos un comportamiento más consistente en los intervalos de los vinos.**
+**Esta visualización nos permite ver la estimación de los intervalos posterior de los coeficientes.**
+**El modelo toma como referencia al juez Daniele Meulder (FR) y al vino A1 para definir los coeficientes del resto de las variables ascoiadas al modelo.**
 
+**Tomando en consideración estos puntos, podemos hacer las siguientes observaciones:**
+**1. Los jueces con una desviación positiva fueron menos estrictos al momento de dar una calificación que los jueces que muestran una desviación negativa. Por lo tanto, podemos observar que los jueces más estrictos fueron Jean-M Cardepat y Robert Hodgson en comparación con la referencia que el modelo tomó.**
+**2. Similar al tema de los jueces, los vinos que tuvieron una desviación negativa fueron los más penalizados, mientras que los que mostraron una desviación positiva fueron los más reconocidos. A diferencia del tema de los jueces, vemos un comportamiento más consistente en los intervalos de los vinos. El único vino que mostró desempeño negativo acorde a la referencia tomada, fue el vino I2 (rojo americano).**
+
+**Es importante notar también que los intervalos mostrados en la gráfica se caracterizan por su amplitud y alineación, lo cual nos sugiere que hay una alta correlación entre las variables del modelo.**
 
 
 b) Ajusta con la previa _default_ en `stan_glm`. Después, ajusta de nuevo el
@@ -947,16 +962,9 @@ m_2b1 <- stan_glm(
   data=data_vinos
 )
 
-print(m_2b1)
-
 bR2_m_2b1 <- bayes_R2(m_2b1)
 
-mcmc_hist(
-  data.frame(bR2_m_2b1),
-  binwidth=0.01
-)  +
-  xlab('Bayesian R2 con previa _default_') +
-  geom_vline(xintercept=median(bR2_m_2b1))
+m_2b1
 ```
 
 
@@ -969,29 +977,42 @@ m_2b2 <- stan_glm(
   prior=hs()
 )
 
-print(m_2b2)
-
 bR2_m_2b2 <- bayes_R2(m_2b2)
 
-mcmc_hist(
+m_2b2
+```
+
+```{r}
+## Gráficas con los resultados
+g1 <- mcmc_hist(
+  data.frame(bR2_m_2b1),
+  binwidth=0.01
+)  +
+  xlab('Bayesian R2 con previa _default_') +
+  geom_vline(xintercept=median(bR2_m_2b1))
+
+g2 <- mcmc_hist(
   data.frame(bR2_m_2b2),
   binwidth=0.01
 )  +
   xlab('Bayesian R2 con distribución a priori regularizada') +
   geom_vline(xintercept=median(bR2_m_2b2))
+
+g1 + g2
 ```
 
-**Al copmarar la R^2-Bayesiana podemos observar que...**
+**Al copmarar la R^2-Bayesiana podemos observar que el modelo con una distribución a priori regularizada está cetrado en un valor que el modelo no regularizado. Esto nos hace sentido porque la regularización limita el ajuste al favorecer la simplicidad del modelo. En general, podemos esperar que un modelo regularizado tenga una R^2-Bayesiana más pequeña que un modelo no regularizado.**
 
 ```{r}
-waic_m_2b1 <- waic(m_2b1)
-waic_m_2b2 <- waic(m_2b2)
+## Criterios de información
+loo_m_2b1 <- loo(m_2b1)
+loo_m_2b2 <- loo(m_2b2)
 
-comp_waic <- cbind(waic_m_2b1, waic_m_2b2)
-comp_waic
+comp_loo <- cbind(loo_m_2b1, loo_m_2b2)
+comp_loo
 ```
 
-**Al observar los resultados de la prueba waic, pordemos notar que...**
+**El criterio loo sugiere que el modelo regularizado es preferible sobre el no regularizado porque el primero tiene un valor "elpd_loo" mayor y una desviación estándar menor. Sin embargo, notamos que no hay una diferencia suficientemente grande para que nos sirva como evidencia concluyente.**
 
 
 c) Ahora considera como predictores `flight`(el tipo de vino), `wine.amer` (de
@@ -1003,22 +1024,18 @@ estas estimaciones con lo que observaste en el inciso `a`?
 ```{r}
 ## Ajuste de modelo
 m_2c <- stan_glm(score_c ~ flight + wine.amer + judge.amer,
-                 prior=normal(0, 0.5),
+                 prior=normal(-0.1, 1.24),
                  data=data_vinos,
                  seed=SEED,
                  refresh = 0,
                )
-# summary(m_2a)
+
 print(m_2c)
-```
-**Para este ejercicio, se optó por utilizar una distribución previa de ...**
 
-
-```{r}
 mcmc_areas(m_2c)
 ```
 
-**A partir de la gráfica de distribucioines posterior podemos observar lo siguiente:**
+**A partir de la gráfica de distribuciones posterior podemos observar lo siguiente:**
 **1. No hay una diferencia relevante en el score dado el tipo de vino (rojo o blanco).**
 **2. Los jueces americanos tienden a ser un poco menos estrictos que los no americanos.**
 **3. Los vinos americanos tienden a ser más peores calificados que los no americanos.**
@@ -1032,19 +1049,19 @@ esta sección?
 ```{r}
 ## Ajuste de modelo
 m_2d <- stan_glm(score_c ~ flight + wine.amer + judge.amer + flight:wine.amer + flight:judge.amer + wine.amer:judge.amer,
-                 prior=normal(0, 0.5),
+                 prior=normal(-0.1, 1.24),
                  data=data_vinos,
                  seed=SEED,
                  refresh = 0,
                )
-# summary(m_2a)
+
 print(m_2d)
 
 mcmc_areas(m_2d)
 ```
 
-**A partir de esta última gráfica de distribuciones posteriores, podemos hacer las siguientes observaciones:**
-**1. **
+**Este modelo, el cual ya incorpora sinergias entre las variables, nos permite notar que la conjunción de la variable `flight` y `wine.amer` juega un rol importante en las predicciones del modelo, cosa que no aprovecharíamos en los modelos sin interacciones.**
+**Los resultados nos siguieren que los jueces americanos tienden a ser más generosos en sus calificaciones que los no americanos. Adicionalmente, también notamos que los vinos americanos tienden a ser más penalizados que los vinos no americanos.**
 
 
 ### Datos: 
@@ -1070,7 +1087,7 @@ idiomas per cápita como resultado:
 
 ```{r, eval = FALSE}
 data <- read.delim("nettle.txt",sep = ";")
-data <- data %>% 
+data <- data %>%
     mutate(leng.per.cap = num.leng/k.pob)%>%
     mutate(log.leng.per.cap = log(leng.per.cap))%>%
     mutate(log.area = log(area))%>%
@@ -1088,15 +1105,15 @@ los efectos principales de la temporada media de crecimiento
 (`mean.growing.season`) y la desviación de la temporada de crecimiento
 (`sd.growing.season`), así como su interacción.
 
-### Respuesta: 
+### Respuesta:
 
 Para este análisis, se busca explicar los efectos principales de la temporada media de crecimiento
 (`mean.growing.season`) y la desviación de la temporada de crecimiento
-(`sd.growing.season`), así como su interacción en el desarrollo de lenguajes en distintas poblaciones. 
+(`sd.growing.season`), así como su interacción en el desarrollo de lenguajes en distintas poblaciones.
 
-Primero comenzamos con un breve análisis exploratorio de diferentes variables para entender la relación entre ellas. 
+Primero comenzamos con un breve análisis exploratorio de diferentes variables para entender la relación entre ellas.
 
-Análisis Exploratorio 
+Análisis Exploratorio
 
 ```{r,eval = FALSE}
 pairs.panels(data[,3:11],
@@ -1110,32 +1127,32 @@ boxplot(data$sd.growing.season, main = "sd.growing.season")
 boxplot(data$log.leng.per.cap, main = "log.leng.per.cap" )
 ```
 
-Depués comenzamos a desarrollar diferentes modelos que expliquen nuestra variable independiente "log.leng.per.cap". La estrategia es la siguiente: crear un modelo base que contenga `mean.growing.season`,`sd.growing.season`, su interacción y `log.area`. Además, se agregarán a este modelo base otras variables que se encuentran dentro de la base de datos que son `log.k.pop` y `num.stations`. El objetivo es crear diferentes modelos, evaluar su capacidad predictiva por medio de WAIC/LOO y seleccionar el mejor. 
+Depués comenzamos a desarrollar diferentes modelos que expliquen nuestra variable independiente "log.leng.per.cap". La estrategia es la siguiente: crear un modelo base que contenga `mean.growing.season`,`sd.growing.season`, su interacción y `log.area`. Además, se agregarán a este modelo base otras variables que se encuentran dentro de la base de datos que son `log.k.pop` y `num.stations`. El objetivo es crear diferentes modelos, evaluar su capacidad predictiva por medio de WAIC/LOO y seleccionar el mejor.
 
-En este caso, las variables `mean.growing.season` y `sd.growing.season` son mayores o iguales a 0. 
+En este caso, las variables `mean.growing.season` y `sd.growing.season` son mayores o iguales a 0.
 
 ```{r,eval = FALSE}
 ###Baseline Model: Only  Mean, SD, Interaction, Area
-model1 <- stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area, 
+model1 <- stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area,
                   data = data,
                   prior_intercept = default_prior_intercept("normal"),
                   prior = default_prior_coef("normal"),
                   seed = 108727, refresh = 0)
-###Model 2 : Baseline Model + numstations k.pop 
-model2 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+num.stations+log.k.pop, 
+###Model 2 : Baseline Model + numstations k.pop
+model2 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+num.stations+log.k.pop,
                   data = data,
                   prior_intercept = default_prior_intercept("normal"),
                   prior = default_prior_coef("normal"),
                   seed = 108727, refresh = 0)
-###Model 3 : Baseline Model + numstations  
-model3 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+num.stations, 
+###Model 3 : Baseline Model + numstations
+model3 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+num.stations,
                   data = data,
                   prior_intercept = default_prior_intercept("normal"),
                   prior = default_prior_coef("normal"),
                   seed = 108727, refresh = 0)
 
-###Model 4 : Baseline Model + kpop  
-model4 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+log.k.pop, 
+###Model 4 : Baseline Model + kpop
+model4 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+log.k.pop,
                   data = data,
                  prior_intercept = default_prior_intercept("normal"),
                   prior = default_prior_coef("normal"),
@@ -1172,28 +1189,28 @@ data_centered = data %>%
               mutate(centered.sd.growing.season= sd.growing.season - mean(sd.growing.season))
 
 ###Basline Model: Only  Mean, SD, Interaction, Area
-model_centered_1 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area, 
+model_centered_1 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area,
                               data = data_centered,
                               prior_intercept = default_prior_intercept("normal"),
                              prior = default_prior_coef("normal"),
                               seed = 108727, refresh = 0)
 
 ### Model centered 2: Basline + numstatiosn + logpop
-model_centered_2 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+num.stations+log.k.pop, 
+model_centered_2 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+num.stations+log.k.pop,
                               data = data_centered,
                               prior_intercept = default_prior_intercept("normal"),
                              prior = default_prior_coef("normal"),
                               seed = 108727, refresh = 0)
 
-### Model centered 3: Basline + numstatiosn 
-model_centered_3 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+num.stations, 
+### Model centered 3: Basline + numstatiosn
+model_centered_3 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+num.stations,
                               data = data_centered,
                               prior_intercept = default_prior_intercept("normal"),
                              prior = default_prior_coef("normal"),
                               seed = 108727, refresh = 0)
 
 ### Model centered 4: Basline  + logpop
-model_centered_4 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+log.k.pop, 
+model_centered_4 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+log.k.pop,
                               data = data_centered,
                               prior_intercept = default_prior_intercept("normal"),
                              prior = default_prior_coef("normal"),
@@ -1237,7 +1254,7 @@ print(waic4)
 print(waic4_centered)
 ```
 
-En conclusión, tenemos que el mejor modelo es el `model_centered_4` por un pequeño margen utilizando el criterio de loo como indicador. Tenemos que este modelo es el que tiene mayor log-densidad predictiva. Además, el hecho de que contenga variables centradas, no afecta la interpretación de los coeficientes en cuanto a que ayuda a responder las hipótesis planteadas más adelante. Hay un punto importante a resaltar, el valor de 0 tanto en   `mean.growing.season` y  `sd.growing.season` sí tienen una interpretación, es decir que no tienen temporada de crecimiento y que no existe variabilidad en ella. Sin embargo, al estudiar los datos, esto sólo se presenta en dos observaciones y es un valor poco frecuente. Dado que los datos incluyen únicamente países ubicados dentro de los trópicos, se decidió usar el modelo con variables centradas ya que se prefiere interpretar los coeficientes como el cambio en la diversidad linguística con respecto a la desviación de la duración de la temporada promedio o la variabilidad promedio. En otras palabras, no nos importa tanto el valor de la temporada de crecimiento (o variabilidad) en sí, sino que más larga o corta es con respecto a los demás. Además, se está controlando por la interacción entre ambas variables. 
+En conclusión, tenemos que el mejor modelo es el `model_centered_4` por un pequeño margen utilizando el criterio de loo como indicador. Tenemos que este modelo es el que tiene mayor log-densidad predictiva. Además, el hecho de que contenga variables centradas, no afecta la interpretación de los coeficientes en cuanto a que ayuda a responder las hipótesis planteadas más adelante. Hay un punto importante a resaltar, el valor de 0 tanto en   `mean.growing.season` y  `sd.growing.season` sí tienen una interpretación, es decir que no tienen temporada de crecimiento y que no existe variabilidad en ella. Sin embargo, al estudiar los datos, esto sólo se presenta en dos observaciones y es un valor poco frecuente. Dado que los datos incluyen únicamente países ubicados dentro de los trópicos, se decidió usar el modelo con variables centradas ya que se prefiere interpretar los coeficientes como el cambio en la diversidad linguística con respecto a la desviación de la duración de la temporada promedio o la variabilidad promedio. En otras palabras, no nos importa tanto el valor de la temporada de crecimiento (o variabilidad) en sí, sino que más larga o corta es con respecto a los demás. Además, se está controlando por la interacción entre ambas variables.
 
 El modelo resultante es el siguiente:
 
@@ -1248,7 +1265,7 @@ Con $x_1 = $ temporada de crecimiento y x_2 = $ variabilidad en temporada de cre
 
 Por lo tanto, ante un cambio en $x_1$ $\hat y $ cambia en $\hat\beta_1+\hat\beta_3*(x_2-\bar x_2)$ unidades y ante un cambio en $x_2$ $\hat y $ cambia en $\hat\beta_2+\hat\beta_3*(x_1-\bar x_1)$ unidades.
 
-Dado que $y$ es una transformación logarítmica de la variable de lenguajes per capita, si buscamos predecir esta variable es necesario hacer la siguiente transformacion del modelo: 
+Dado que $y$ es una transformación logarítmica de la variable de lenguajes per capita, si buscamos predecir esta variable es necesario hacer la siguiente transformacion del modelo:
 
 Si z es lenguajes per capita
 $$ y = \ln(z) $$
@@ -1256,32 +1273,32 @@ $$y= \beta_0 + \beta_1(x_1-\bar x_1)+\beta_2(x_2-\bar x_2) + \beta_3(x_1-\bar x_
 Se obtiene que:
 
 $$z= e^{\beta_0 + \beta_1(x_1-\bar x_1)+\beta_2(x_2-\bar x_2) + \beta_3(x_1-\bar x_1)*(x_2-\bar x_2)+\beta_4 x_4+\beta_5 x_5 +\epsilon}$$
-Como el modelo solo busca probar ciertas hipótesis y no predecir, no es necesario realizar esta transformación. 
+Como el modelo solo busca probar ciertas hipótesis y no predecir, no es necesario realizar esta transformación.
 
 a) Evalúe la hipótesis de que la diversidad lingüística, medida por
 `log(lang.per.cap)`, está asociada positivamente con la duración promedio de la
 temporada de crecimiento, `mean.growing.season`. Considera tambíen  `log(area)`
 en tu modelo (no como una interacción). Interpreten sus resultados.
- 
+
  La hipotesis de que la  diversidad lingüística, medida por
 `log(lang.per.cap)`, está asociada positivamente con la duración promedio de la
-temporada de crecimiento, `mean.growing.season` es correcta. En este modelo se observa que el coeficiente asociado a la 
+temporada de crecimiento, `mean.growing.season` es correcta. En este modelo se observa que el coeficiente asociado a la
 variable `centered.mean.growing.season` es positivo. La interpretacion es que en pais, mientras mas dure la temporada de crecimiento relativo a los valores promedio, mayor sera la diversidad linguistica. Esto quiere decir que mientras más larga sea la temprorada de crecimiento mayor será la diversidad linguística. Además observamos que la distribucion posterior del coeficiente asociado a la variable `centered.mean.growing.season` será positivo con un 90% de probabilidad ya que su intervalo de confianza va de 0.089 a 0.239.
 
 ```{r, eval = FALSE}
-ggplot(data = data_centered, aes(x = centered.mean.growing.season, y = log.leng.per.cap))  + 
-    geom_abline(data = as_tibble(model_centered_4) %>% sample_frac(.2), 
-                aes(slope = centered.mean.growing.season, intercept = `(Intercept)`), 
-                color = 'grey', alpha = .4) + 
-    geom_abline(slope = coef(model_centered_4)[2], intercept = coef(model_centered_4)[1], color = 'salmon') + 
+ggplot(data = data_centered, aes(x = centered.mean.growing.season, y = log.leng.per.cap))  +
+    geom_abline(data = as_tibble(model_centered_4) %>% sample_frac(.2),
+                aes(slope = centered.mean.growing.season, intercept = `(Intercept)`),
+                color = 'grey', alpha = .4) +
+    geom_abline(slope = coef(model_centered_4)[2], intercept = coef(model_centered_4)[1], color = 'salmon') +
     geom_point()
 
 posterior_vs_prior(model_centered_4,pars= c("centered.mean.growing.season"))
 
-as_tibble(model_centered_4)%>% 
-    ggplot(aes(x = centered.mean.growing.season)) + 
-        geom_histogram() + 
-        geom_vline(xintercept = coef(model_centered_4)[2], lty = 2) + 
+as_tibble(model_centered_4)%>%
+    ggplot(aes(x = centered.mean.growing.season)) +
+        geom_histogram() +
+        geom_vline(xintercept = coef(model_centered_4)[2], lty = 2) +
         xlab("Valor del Coeficiente")+
         ggtitle("Distribución posterior del Coeficiente")
 ```
@@ -1303,25 +1320,25 @@ una interacción). Interpreten sus resultados.
 
  La hipotesis de que la diversidad lingüística está asociada
 negativamente con la desviación estándar de la duración de la temporada de
-crecimiento no puede confirmarse. . En este modelo se observa que el coeficiente asociado a la 
-variable `centered.sd.growing.season` es negativo La interpretacion es que en pais, mientras mas variación la temporada de crecimiento relativo a los valores de variación promedio, menor sera la diversidad linguistica. Esto quiere decir que mientras más variabilidad haya en la temporada de crecimiento menor será la diversidad linguística. Además observamos que con la distribucion posterior del coeficiente asociado a la variable `centered.sd.growing.season` no puede confirmarse que tenga valores siempre negativos. El intervalo de confianza asociado es de -0.367 a 0.0902 con un 90% de certeza. 
+crecimiento no puede confirmarse. . En este modelo se observa que el coeficiente asociado a la
+variable `centered.sd.growing.season` es negativo La interpretacion es que en pais, mientras mas variación la temporada de crecimiento relativo a los valores de variación promedio, menor sera la diversidad linguistica. Esto quiere decir que mientras más variabilidad haya en la temporada de crecimiento menor será la diversidad linguística. Además observamos que con la distribucion posterior del coeficiente asociado a la variable `centered.sd.growing.season` no puede confirmarse que tenga valores siempre negativos. El intervalo de confianza asociado es de -0.367 a 0.0902 con un 90% de certeza.
 
 
 ```{r, eval = FALSE}
 
-ggplot(data = data_centered, aes(x = centered.sd.growing.season, y = log.leng.per.cap))  + 
-    geom_abline(data = as_tibble(model_centered_1) %>% sample_frac(.2), 
-                aes(slope = centered.sd.growing.season, intercept = `(Intercept)`), 
-                color = 'grey', alpha = .4) + 
-    geom_abline(slope = coef(model_centered_1)[3], intercept = coef(model_centered_1)[1], color = 'salmon') + 
+ggplot(data = data_centered, aes(x = centered.sd.growing.season, y = log.leng.per.cap))  +
+    geom_abline(data = as_tibble(model_centered_1) %>% sample_frac(.2),
+                aes(slope = centered.sd.growing.season, intercept = `(Intercept)`),
+                color = 'grey', alpha = .4) +
+    geom_abline(slope = coef(model_centered_1)[3], intercept = coef(model_centered_1)[1], color = 'salmon') +
     geom_point()
 
 posterior_vs_prior(model_centered_1,pars= c("centered.sd.growing.season"))
 
-as_tibble(model_centered_1)%>% 
-    ggplot(aes(x = centered.sd.growing.season)) + 
-        geom_histogram() + 
-        geom_vline(xintercept = coef(model_centered_1)[3], lty = 2) + 
+as_tibble(model_centered_1)%>%
+    ggplot(aes(x = centered.sd.growing.season)) +
+        geom_histogram() +
+        geom_vline(xintercept = coef(model_centered_1)[3], lty = 2) +
         xlab("Valor del Coeficiente")+
         ggtitle("Distribución posterior del Coeficiente")
 ```
@@ -1341,19 +1358,19 @@ utilizarán durante las sequías.
 Por último, se analiza la interacción entre la duración y la variabilidad de la temprada de crecimiento. La hipótesis sugiere que cuando ambas son muy largas o muy cortas relativas al promedio, la diversidad linguística se reduce. En este caso, de acuerdo con nuestro modelo, la hipótesis sí puede confirmarse. De acuerdo con la distribución posterior de los parámetros, el intervalo de confianza con 90% de certeza se encuentra entre -0.1261 y -0.0097. Estos intervalos confirman la relación negativa entre la interacción de `mean.growing.season` y `sd.growing.season` en la diversidad linguística.
 
 ```{r, eval = FALSE}
-ggplot(data = data_centered, aes(x = centered.sd.growing.season*centered.mean.growing.season, y = log.leng.per.cap))  + 
-    geom_abline(data = as_tibble(model_centered_4) %>% sample_frac(.2), 
-                aes(slope = centered.sd.growing.season*centered.mean.growing.season, intercept = `(Intercept)`), 
-                color = 'grey', alpha = .4) + 
-    geom_abline(slope = coef(model_centered_4)[6], intercept = coef(model_centered_4)[1], color = 'salmon') + 
+ggplot(data = data_centered, aes(x = centered.sd.growing.season*centered.mean.growing.season, y = log.leng.per.cap))  +
+    geom_abline(data = as_tibble(model_centered_4) %>% sample_frac(.2),
+                aes(slope = centered.sd.growing.season*centered.mean.growing.season, intercept = `(Intercept)`),
+                color = 'grey', alpha = .4) +
+    geom_abline(slope = coef(model_centered_4)[6], intercept = coef(model_centered_4)[1], color = 'salmon') +
     geom_point()
 
 posterior_vs_prior(model_centered_4,pars= c("centered.mean.growing.season:centered.sd.growing.season"))
 
-as_tibble(model_centered_4)%>% 
-    ggplot(aes(x = `centered.mean.growing.season:centered.sd.growing.season`)) + 
-        geom_histogram() + 
-        geom_vline(xintercept = coef(model_centered_4)[6], lty = 2) + 
+as_tibble(model_centered_4)%>%
+    ggplot(aes(x = `centered.mean.growing.season:centered.sd.growing.season`)) +
+        geom_histogram() +
+        geom_vline(xintercept = coef(model_centered_4)[6], lty = 2) +
         xlab("Valor del Coeficiente")+
         ggtitle("Distribución posterior del Coeficiente")
 
