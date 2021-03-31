@@ -781,7 +781,7 @@ data_vinos %>%
   )
 
 t.test(
-  filter(data_vinos, flight == "red")$score, filter(data_vinos, flight != "red")$score
+  filter(data_vinos, flight == "red")$score_c, filter(data_vinos, flight != "red")$score_c
 )
 ```
 **Aquí podemos observar que no hay una diferencia relevante en las calificaciones según el tipo de vino (rojo o blanco).**
@@ -799,7 +799,7 @@ data_vinos %>%
     max(score_c)
   )
 
-t.test(filter(data_vinos, wine.amer == 0)$score, filter(data_vinos, wine.amer == 1)$score)
+t.test(filter(data_vinos, wine.amer == 0)$score_c, filter(data_vinos, wine.amer == 1)$score_c)
 ```
 **Aquí vemos que tampoco hay una diferencia muy grande en las calificaciones según el origen del vino.**
 
@@ -822,12 +822,12 @@ data_vinos %>%
 ```{r}
 ## Evaluando diferencias en vinos rojos dependiendo de su origen.
 amer_red <- data.frame(
-  score = filter(data_vinos, wine.amer == 1, flight == "red")$score,
+  score_c = filter(data_vinos, wine.amer == 1, flight == "red")$score_c,
   type = "rojo_americano"
 )
 
 nonamer_red <- data.frame(
-  score = filter(data_vinos, wine.amer == 0, flight == "red")$score,
+  score_c = filter(data_vinos, wine.amer == 0, flight == "red")$score_c,
   type = "rojo_no_americano"
 )
 
@@ -847,12 +847,12 @@ t.test(filter(data_vinos, wine.amer == 1, flight == "red")$score_c, filter(data_
 ```{r}
 ## Evaluando diferencias en vinos blancos dependiendo de su origen.
 amer_white <- data.frame(
-  score = filter(data_vinos, wine.amer == 1, flight == "white")$score,
+  score_c = filter(data_vinos, wine.amer == 1, flight == "white")$score_c,
   type = "blanco_americano"
 )
 
 nonamer_white <- data.frame(
-  score = filter(data_vinos, wine.amer == 0, flight == "white")$score,
+  score_c = filter(data_vinos, wine.amer == 0, flight == "white")$score_c,
   type = "blanco_no_americano"
 )
 
@@ -875,23 +875,18 @@ data_vinos %>%
   group_by(judge.amer) %>%
   summarise(
     n(),
-    mean(score),
-    min(score),
-    max(score)
+    mean(score_c),
+    min(score_c),
+    max(score_c)
   )
 
-amer_judge <- filter(data_vinos, judge.amer == 1)$score
-nonamer_judge <- filter(data_vinos, judge.amer == 0)$score
+amer_judge <- filter(data_vinos, judge.amer == 1)$score_c
+nonamer_judge <- filter(data_vinos, judge.amer == 0)$score_c
 
 t.test(amer_judge, nonamer_judge)
 ```
 **Estos resultados nos sugieren que no hay una diferencia importante entre los scores de jueces americanos y no americanos.**
 
-
-
-```{r}
-data_vinos
-```
 
 a) En este inciso, sólo considera la variación entre jueces y
 vinos. Ajusta un modelo de regresión lineal utilizando estos predictores.
@@ -913,8 +908,8 @@ print(m_2a)
 
 ```{r}
 ## Exploración de los coeficientes para definir distribución a priori.
-hist(m_1a$coefficients)
-MASS::fitdistr(m_1a$coefficients, "normal")
+hist(m_2a$coefficients)
+MASS::fitdistr(m_2a$coefficients, "normal")
 ```
 
 
