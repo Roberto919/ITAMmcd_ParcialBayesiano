@@ -30,7 +30,7 @@ será el momento más oportuno para abrir el espacio).
 
 * Al entregar este examen afirmas que el trabajo se realizó sólo con tu
 compañeros de equipo. El material que utilizaste para apoyarte consistió de las
-notas en clase (pdfs en Canvas), el codigo fuente de las notas en el repositorio
+notas en clase (pdfs en Canvas), el código fuente de las notas en el repositorio
 de Github.
 
 * Al entregar estás dando tu consentimiento para que bajo sospecha y suficiente
@@ -44,9 +44,9 @@ El examen está compuesto por tres apartados cuyo peso son los siguientes:
 3. Datos Nettle    (15%)
 
 ```{r setup, include=FALSE}
-#install.packages("tidybayes")
-#install.packages("ggpubr") #graficación
-#install.packages("psych") #graficación
+install.packages("tidybayes")
+install.packages("ggpubr") #graficación
+install.packages("psych") #graficación
 library(modelr)
 library(tidybayes)
 library(tidymodels)
@@ -554,23 +554,24 @@ comparativo_diff_loo_1g<-loo_compare(loo_1g_g0,loo_1g_g1,loo_1g_g2,loo_1g_g3,loo
 comparativo_diff_loo_1g  #imprime comparativo de modelos
 ```
 
-Si bien estos resultados colocan en primer posición al modelo con el polinomio de grado 6 (mejor modelo), los modelos con polinomios de grado 4 y 5 como predictores tienen una log-densidad predictiva muy similar, además dado el error estándar de la diferencia que tienen es posible que para nuevas simulaciones de la posterior el  modelo 5 o 4 sea el mejor si usamos otra semilla. A continuación presentamos ejercicios donde validamos esto ():
+Si bien estos resultados colocan en primer posición al modelo con el polinomio de grado 6 (mejor modelo), los modelos con polinomios de grado 4 y 5 como predictores tienen una log-densidad predictiva muy similar, además dado el error estándar de la diferencia que tienen es posible que para nuevas simulaciones de la posterior el  modelo 5 o 4 sea el mejor si usamos otra semilla. A continuación presentamos un ejemplo donde validamos esto:
 
 ```{r}
+SEED2 <- 1991 #proponemos una semilla para reproducibilidad
 #volvemos a correr los modelos con otra senilla
 fit_1f_g0_v2 <- stan_glm(altura ~ 1, data = howell.centrado, seed=SEED, refresh = 0)
 loo_1f_g0_v2<-loo(fit_1f_g0_v2)
-fit_1f_g1_v2 <- stan_glm(altura ~ poly(edad.centrada,1,raw=TRUE), data = howell.centrado, seed=SEED+1, refresh = 0)
+fit_1f_g1_v2 <- stan_glm(altura ~ poly(edad.centrada,1,raw=TRUE), data = howell.centrado, seed=SEED2, refresh = 0)
 loo_1f_g1_v2<-loo(fit_1f_g1_v2)
-fit_1f_g2_v2 <- stan_glm(altura ~ poly(edad.centrada,2,raw=TRUE), data = howell.centrado, seed=SEED+1, refresh = 0)
+fit_1f_g2_v2 <- stan_glm(altura ~ poly(edad.centrada,2,raw=TRUE), data = howell.centrado, seed=SEED2, refresh = 0)
 loo_1f_g2_v2<-loo(fit_1f_g2_v2)
-fit_1f_g3_v2 <- stan_glm(altura ~ poly(edad.centrada,3,raw=TRUE), data = howell.centrado, seed=SEED+1, refresh = 0)
+fit_1f_g3_v2 <- stan_glm(altura ~ poly(edad.centrada,3,raw=TRUE), data = howell.centrado, seed=SEED2, refresh = 0)
 loo_1f_g3_v2<-loo(fit_1f_g3_v2)
-fit_1f_g4_v2 <- stan_glm(altura ~ poly(edad.centrada,4,raw=TRUE), data = howell.centrado, seed=SEED+1, refresh = 0)
+fit_1f_g4_v2 <- stan_glm(altura ~ poly(edad.centrada,4,raw=TRUE), data = howell.centrado, seed=SEED2, refresh = 0)
 loo_1f_g4_v2<-loo(fit_1f_g4_v2)
-fit_1f_g5_v2 <- stan_glm(altura ~ poly(edad.centrada,5,raw=TRUE), data = howell.centrado, seed=SEED+1, refresh = 0)
+fit_1f_g5_v2 <- stan_glm(altura ~ poly(edad.centrada,5,raw=TRUE), data = howell.centrado, seed=SEED2, refresh = 0)
 loo_1f_g5_v2<-loo(fit_1f_g5_v2)
-fit_1f_g6_v2 <- stan_glm(altura ~ poly(edad.centrada,6,raw=TRUE), data = howell.centrado, seed=SEED+1, refresh = 0)
+fit_1f_g6_v2 <- stan_glm(altura ~ poly(edad.centrada,6,raw=TRUE), data = howell.centrado, seed=SEED2, refresh = 0)
 loo_1f_g6_v2<-loo(fit_1f_g6_v2)
 ```
 
@@ -579,35 +580,12 @@ comparativo_diff_loo_1g_v2<-loo_compare(loo_1f_g0_v2,loo_1f_g1_v2,loo_1f_g2_v2,l
 comparativo_diff_loo_1g_v2 #imprime comparativo
 ```
 
-En esta simulación, el modelo con polinomio grado 4 es el de mejor desempeño en relación a la log-densidad predictiva.
+En este caso, el modelo con polinomio grado 4 es el de mejor desempeño en relación a la log-densidad predictiva.
 
-```{r}
-#volvemos a correr los modelos con otra senilla
-fit_1f_g0_v3 <- stan_glm(altura ~ 1, data = howell.centrado, seed=SEED, refresh = 0)
-loo_1f_g0_v3<-loo(fit_1f_g0_v3)
-fit_1f_g1_v3 <- stan_glm(altura ~ poly(edad.centrada,1,raw=TRUE), data = howell.centrado, seed=SEED-12, refresh = 0)
-loo_1f_g1_v3<-loo(fit_1f_g1_v3)
-fit_1f_g2_v3 <- stan_glm(altura ~ poly(edad.centrada,2,raw=TRUE), data = howell.centrado, seed=SEED-12, refresh = 0)
-loo_1f_g2_v3<-loo(fit_1f_g2_v3)
-fit_1f_g3_v3 <- stan_glm(altura ~ poly(edad.centrada,3,raw=TRUE), data = howell.centrado, seed=SEED-12, refresh = 0)
-loo_1f_g3_v3<-loo(fit_1f_g3_v3)
-fit_1f_g4_v3 <- stan_glm(altura ~ poly(edad.centrada,4,raw=TRUE), data = howell.centrado, seed=SEED-12, refresh = 0)
-loo_1f_g4_v3<-loo(fit_1f_g4_v3)
-fit_1f_g5_v3 <- stan_glm(altura ~ poly(edad.centrada,5,raw=TRUE), data = howell.centrado, seed=SEED-12, refresh = 0)
-loo_1f_g5_v3<-loo(fit_1f_g5_v3)
-fit_1f_g6_v3 <- stan_glm(altura ~ poly(edad.centrada,6,raw=TRUE), data = howell.centrado, seed=SEED-12, refresh = 0)
-loo_1f_g6_v3<-loo(fit_1f_g6_v3)
-```
-
-```{r}
-comparativo_diff_loo_1g_v3<-loo_compare(loo_1f_g0_v3,loo_1f_g1_v3,loo_1f_g2_v3,loo_1f_g3_v3,loo_1f_g4_v3,loo_1f_g5_v3,loo_1f_g6_v3) #calcula comparativo de diferencia en términos de la log-densidad predictiva y un error estándar sobre esta diferencia (se_diff). Ordenando los modelos del mejor al peor
-comparativo_diff_loo_1g_v3
-```
-
-De lo anterior, concluimos que la capacidad predictiva de los modelos con polinomios grado 4, 5 y 6 no tiene una diferencia significativa y por tanto, escogemos como el mejor modelo al que incorpora como predictores a la edad.centrada como un polinomio de grado 4 por el principio de parsimonia.
+De lo anterior, concluimos que la capacidad predictiva de los modelos con polinomios de mayor grado (4-6) no tiene una diferencia lo suficientemente fuerte y por tanto, escogemos como el mejor modelo al que incorpora como predictores a la edad.centrada como un polinomio de grado 4 por el principio de parsimonia.
 
 i) Ahora ajustaremos un polinomio de grado 6 pero incorporaremos distribuciones
-previas mas restrictivas. Es decir, considera que $\beta_k \sim \mathsf{N}(0,
+previas más restrictivas. Es decir, considera que $\beta_k \sim \mathsf{N}(0,
 \sqrt{5})$ para toda $k.$ Nota que la desviación estándar es $\sqrt{5}.$ Evalúa
 el criterio de información que utilizaste en el inciso anterior, y compara la
 estimación de número efectivo de parámetros. ¿Por qué crees que sucede esto?
