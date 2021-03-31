@@ -43,19 +43,25 @@ El examen está compuesto por tres apartados cuyo peso son los siguientes:
 2. Datos Vinos     (25%)
 3. Datos Nettle    (15%)
 
-
 ```{r setup, include=FALSE}
-
+#install.packages("tidybayes")
+#install.packages("ggpubr") #graficación
+#install.packages("psych") #graficación
+library(modelr)
+library(tidybayes)
 library(tidymodels)
 library(tidyverse)
-library(cmdstanr)
-library(rstanarm)
+library(cmdstanr) #ajusta modelos bayesianos con stan
+library(rstanarm) #ajusta modelos bayesianos con stan
 library(bayesplot)
-library(loo)
-
-library(patchwork)
+library(loo) #criterios de información
+library(patchwork) #mejora visualización
 library(scales)
-knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE,
+library(ggplot2) #genera gráficos
+library(ggpubr)
+library(psych) #graficación
+library(MASS)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE, 
                       fig.align = 'center', fig.width = 5, fig.height=3, cache = TRUE)
 comma <- function(x) format(x, digits = 2, big.mark = ",")
 theme_set(theme_linedraw())
@@ -63,7 +69,7 @@ theme_set(theme_linedraw())
 
 ## Datos: !Kung San.
 
-Los datos que que tenemos en `Howell.txt` son datos parciales del censo para el
+Los datos que tenemos en `Howell.csv` son datos parciales del censo para el
 área de Dobe, en particular para la población de los [!Kung
 San.](https://es.wikipedia.org/wiki/!Kung) Éstos fueron recopilados a partir de
 entrevistas realizadas por Nancy Howell a finales de la década de 1960.
@@ -73,110 +79,136 @@ se registraron las alturas para estas personas. Proporciona predicciones para
 las alturas e intervalos del 89% para cada uno de estos individuos basados en un
 modelo de regresión lineal.
 
+### Respuesta:
+
 ```{r}
-peso<-tibble(peso = c(46.95, 43.72, 64.78, 32.59, 54.63))
-peso
+pesos<-tibble(peso = c(46.95, 43.72, 64.78, 32.59, 54.63))
+pesos
 ```
 
+
+Dado que queremos generar predicciones para las alturas y sólo tenemos los pesos, decidimos utilizar un modelo de regresión lineal bajo un enfoque bayesiano utilizando como variable predictora el peso.
 
 ```{r}
 datos1<-read_delim("howell.csv", delim = ";" ) #Cargamos los datos
 ```
 
-```{r}
-howell<-datos1
-howell$genero<-factor(howell$genero)
-glimpse(howell)
-```
-
+Para lo cual, primero haremos un análisis exploratorio a los datos parciales del censo para conocer más al respecto.
 
 ```{r}
-#altura en cm
-#eso en kg
-#edad en años
-#indicador si es hombre
-summary(howell)
+howell<-datos1 #hacemos una copia de los datos originales
+head(howell) #imprimimos las primeras observaciones
 ```
 
 ```{r}
-m_1a <- lm(altura ~ peso, howell)
-summary(m_1a)
+dim(howell)
 ```
 
 ```{r}
-m_1a <- stan_glm(altura ~ peso, data = howell, refresh = 0)
-#prior_summary(m_1a)
-summary(m_1a)
+howell$genero<-factor(howell$genero) #Convertimos la variable a factor
+summary(howell) #generamos resumen de las estadísticas
 ```
 
+Primero identificamos que nuestro conjunto de datos contiene únicamente 544 observaciones y 4 columnas. Donde la variable a predecir (altura) se encuentra en centímetros, el peso en kg, la edad en años y el género es un indicador de sexo masculino cuando toma el valor de 1.
 
-### Predicciones usando `stan_glm`
-
-```{r }
-new <- data.frame(peso)
-y_point_pred <- predict(m_1a, newdata=new)
-y_point_pred
-```
-
-```{r }
-y_linpred <- posterior_linpred(m_1a, newdata=new)
-summary(y_linpred)
-```
-
-```{r }
-y_pred <- posterior_predict(m_1a, newdata=new)
-summary(y_pred)
-```
-
-Para poder dar una interpretación más sencilla al modelo lineal para predecir la altura, estandarizaremos las variables numéricas centrando al rededor de su media:
-
-```{r, eval = FALSE}
-howell<-howell %>%
-  mutate(peso.centrado = peso-mean(peso))
-howell
-```
-
-Una persona promedio con peso y edad promedio tendría una altura de 138 cm, cuando la persona tiene un punto adicional sobre el peso promedio, la altura aumenta 1.76cm.
+Después vemos que la muestra contiene a personas de 0 a 88 años de edad con pesos que van de los 4 kilos a los 63. Sin embargo, llama nuestra atención que aunque la mediana de altura está alrededor de 1.5 metros, la mediana de la edad corresponde a una persona adulta con 27 años de edad y 40 kg de peso. Para definir la distribución previa de los parámetros, decidimos que no tenemos suficiente conocimiento previo para poder proponerla con un suficiente conocimiento del problema.  Debido a ello, utilizamos el default de la distribución que proporciona stan_glm (una distribución poco informativa) para no sesgar nuestro modelo, asumieendo distribuciones previas normales para los coeficientes.
 
 ```{r}
-m_1a <- lm(altura ~ peso.centrado, howell)
-summary(m_1a)
+SEED <- 2021 #proponemos una semilla para reproducibilidad
+set.seed(SEED)
+fit_1a <- stan_glm(altura ~ peso, data = howell, seed=SEED, refresh = 0) #generamos el modelo lineal bayesiano
+print(fit_1a) #imprimimos el objeto con el modelo
+```
+
+Lo anterior nos dice que la predicción es precisa hasta más / menos 9.4 unidades que en este caso son centímetros.
+
+```{r}
+prior_summary(fit_1a) #imprimimos el resumen con las priors de default que usa stan_glm para nuestros datos
+```
+
+Como comentamos, la distribución previa que utilizamos es la de default la cual parte de nuestra muestra de 544 observaciones. Esto es, para el intercepto utiliza la altura media de nuestros datos con una desviación estándar de 2.5 para el intercepto y el peso.
+
+```{r}
+summary(fit_1a) #mostramos el resumen del modelo
+```
+
+
+Ahora utilizaremos la función posterior_predict() para calcular las predicciones de altura con base en los pesos de los 5 individuos bajo nuestro modelo de regresión ya que considera la incertidumbre asociada a los coeficientes del modelo y al error observacional (epsilon) incorporando sigma o el error aditivo.
+
+```{r}
+post_predict_1a<-as_tibble(posterior_predict(fit_1a, newdata=pesos,seed=SEED)) %>%  #genera predicciones de las 5 nuevas observaciones incorporando toda la incentidumbre asociada a los coeficientes y el error observacional
+  #cada fila es una simulación bajo una muestra distinta
+  mutate(sample_id = 1:4000) %>% #creamos ID para cada muestra
+  pivot_longer(cols = 1:5) %>% #genera columna con predicciones por cada muestra
+  mutate(name = fct_inorder(name)) %>% #ordenamos
+  group_by(name) %>% #name es la predicción de cada individuo (1-5)
+  summarise(altura_prom=mean(value), #calculamos la media de las predicciones
+            altura_mediana=median(value), #calculamos la mediana de las predicciones
+            altura_lim_inf=quantile(value,.055), #intervalos del 89% de probabilidad
+            altura_lim_sup=quantile(value,.945))
+
+post_predict_1a<-post_predict_1a %>% #agregamos los pesos observados de los individuos a las predicciones de la altura
+  mutate(pesos)
+
+post_predict_1a %>% mutate_if(is.numeric, ~round(., 1)) #mostramos los resultados redondeando a 1 cifra
 ```
 
 ```{r}
-m_1a$coefficients
+#Graficamos las predicciones de la posterior del modelo para la altura (media y bandas del 89%) incorporando los datos observados
+g_1a<-post_predict_1a %>% #usamos las predicciones que obtuvimos con la función posterior_predict()
+  ggplot(aes(peso,altura_prom)) + #graficamos peso vs altura_prom
+  geom_ribbon(aes(ymin=altura_lim_inf,ymax=altura_lim_sup),fill = "grey70",alpha=.3) + #bandas de predicción
+  geom_line(color="red") + #media de predicciones
+  geom_jitter(data=howell %>% filter(peso>32), #agregamos los datos de la muestra filtrándolas con peso mayor a 32 
+              aes(peso,altura),
+              height = 0, width = 0.01, colour="darkblue") +
+  labs(title = "Predicciones del modelo lineal altura ~ peso I=89%") + 
+  labs(y = "altura")
+g_1a
 ```
-
-Las predicciones para las alturas son:
-
 
 b) Ajusta un modelo lineal para personas menores de 18 años de edad utilizando
 como predictores la `edad` y el `peso`. Interpreta los coeficientes que resultan
 del modelo. Si consideras necesario centra los valores de las variables
 predictoras.
 
-```{r}
-menores_edad<-datos1 %>% filter(edad < 18)
-menores_edad
-```
-Para poder dar una interpretación más sencilla al modelo lineal para predecir la altura, centraremos las variables numéricas centrando al rededor de su media:
+### Respuesta:
 
-```{r, eval = FALSE}
-menores_edad<-menores_edad %>%
-  mutate(peso.centrado = peso-mean(peso),
-         edad.centrado = edad-mean(edad))
-menores_edad
-```
-```{r}
-m_1b <- lm(altura ~ peso.centrado+ edad.centrado, menores_edad)
-summary(m_1b)
-```
+Primero filtramos la muestra con las personas menores a 18 años
 
 ```{r}
-m_1b <- stan_glm(altura ~ peso.centrado+ edad.centrado, data = menores_edad, refresh = 0)
-#prior_summary(m_2a)
-summary(m_1b)
+menores.edad<-datos1 %>% filter(edad < 18) #copiamos la muestra filtrando por los individuos con edades menores a 18 años
+menores.edad$genero<-factor(menores.edad$genero) #convertimos la variable a factor
+summary(menores.edad) #generamos resumen de las estadísticas
 ```
+
+Calculamos un resumen con estadísticas de dispersión, en este caso la mediana de la edad es de sólo 7 años y la muestra se reduce a 192 observaciones: 92 varones y 100 mujeres. La altura promedio de los datos ahora es de sólo 108 centímetros o 1.08 metros.
+
+Posteriormente, centramos las variables alrededor de su media para poder dar una interpretación más sencilla al modelo lineal para predecir la altura:
+
+```{r}
+peso.centrado<-as.data.frame(scale(menores.edad$peso,scale=FALSE)) #centramos peso alrededor de su media
+colnames(peso.centrado)<-c("peso.centrado") #lo nombramos peso.centrado
+edad.centrada<-as.data.frame(scale(menores.edad$edad,scale=FALSE)) #centramos edad alrededor de su media
+colnames(edad.centrada)<-c("edad.centrada") #lo nombramos peso.centrado
+menores.edad<-cbind(menores.edad,peso.centrado,edad.centrada) #integramos las variables en menores.edad
+head(menores.edad) #imprimimos las primeras observaciones
+```
+
+Y generamos el modelo con ambos predictores centrados:
+
+```{r}
+fit_1b <- stan_glm(altura ~ peso.centrado + edad.centrada, data = menores.edad, seed=SEED, refresh = 0) #generamos el modelo lineal bayesiano
+print(fit_1b) #imprimimos el objeto con el modelo
+```
+
+Obtenemos un resumen del modelo:
+
+```{r}
+summary(fit_1b) #generamos resumen de las estadísticas
+```
+
+De los resultados anteriores, vemos que el intercepto representa la altura promedio de los menores de 18 años para una persona con un peso y edad alrededor del promedio la cual corresponde a 108 cm o 1.08 metros como vimos al inicio. Por otro lado, el peso y edad centrada tienen un coeficiente positivo en el modelo, lo cual indica para ambos predictores un incremento sobre el valor promedio centrado del peso y la edad contribuyen a un aumento sobre la predicción de la altura. En el caso del peso.centrado, por cada incremento de una unidad, predicción de la altura aumenta 1.4 cm la altura mientras que en la edad centrada por cada incremento de una unidad, la predicción de altura sube 2.3cm adicionales.
 
 c) Para el modelo resultante, haz gráficos que muestren la relación de la
 variable objetivo con los predictores. De igual forma, incorpora en la
@@ -184,17 +216,44 @@ visualización la respuesta del modelo lineal junto con intervalos de predicció
 al 89\% y 97\%, de tal forma que incorpores la incertidumbre que se ha
 cuantificado en tu gráfico.
 
-```{r}
-menores_edad %>%
-  ggplot(aes(x=peso.centrado,y=altura)) +
-  geom_point()
-```
-```{r}
-menores_edad %>%
-  ggplot(aes(x=edad.centrado,y=altura)) +
-  geom_point()
-```
+### Respuesta:
 
+```{r}
+#Gráfico Dispersión altura vs predictor 1: peso.centrado
+g_1c_altura_peso.centrado<-menores.edad %>% 
+  ggplot(aes(x=peso.centrado,y=altura)) +
+  geom_point()+
+  geom_smooth(method = "lm")+
+  labs(title = "Altura vs predictor 1")
+
+#Gráfico Dispersión altura vs predictor 2: edad.centrada
+g_1c_altura_edad.centrada<-menores.edad %>%
+  ggplot(aes(x=edad.centrada,y=altura)) +
+  geom_point()+
+  geom_smooth(method = "lm")+
+  labs(title = "Altura vs predictor 2")
+
+#Gráfico altura vs predictor 1: peso.centrado
+g_1c_altura_pred_peso<-ggplot(data = menores.edad, aes(x = peso.centrado, y = altura))  + 
+    geom_abline(data = as_tibble(fit_1b) %>% sample_frac(.2), 
+                aes(slope = peso.centrado, intercept = `(Intercept)`), 
+                color = 'grey', alpha = .4) + 
+    geom_abline(slope = coef(fit_1b)[2], intercept = coef(fit_1b)[1], color = 'salmon') + 
+    geom_point()+
+  labs(title = "Altura vs respuesta 1")
+
+#Gráfico altura vs predictor 2: edad.centrada
+g_1c_altura_pred_edad<-ggplot(data = menores.edad, aes(x = edad.centrada, y = altura))  + 
+    geom_abline(data = as_tibble(fit_1b) %>% sample_frac(.2), 
+                aes(slope = edad.centrada, intercept = `(Intercept)`), 
+                color = 'grey', alpha = .4) + 
+    geom_abline(slope = coef(fit_1b)[1], intercept = coef(fit_1b)[2], color = 'salmon') + 
+    geom_point()+
+  labs(title = "Altura vs respuesta 2")
+
+g_1c_altura_peso.centrado+g_1c_altura_pred_peso+g_1c_altura_edad.centrada+g_1c_altura_pred_edad
+```
+Se aprecia una relación cercana a la lineal con ambos predictores.
 
 d) Supongamos que tenemos una amiga que es experta en
 [alometría](https://es.wikipedia.org/wiki/Alometr%C3%ADa) y les menciona que el
@@ -203,45 +262,423 @@ logarítmica. Ajusta el modelo con todos las observaciones y compara con el
 modelo del inciso a) y un modelo adicional que sólo incorpora el `peso`. ¿Cuál
 parece tener mejor capacidad predictiva?
 
+### Respuesta:
+
+Primero creamos la variable log.peso donde calculamos el logaritmo natural aplicado al peso sobre todas las observaciones de nuestra muestra.
+
 ```{r}
-m_1d <- stan_glm(altura ~ log(peso.centrado), data = howell, refresh = 0)
-#prior_summary(m_1a)
-summary(m_1d)
+howell<-howell %>% 
+  mutate(log.peso = log(peso)) #creamos la variable log.peso aplicando el logaritmo natural al peso
+
+head(howell) #imprimimos las primeras observaciones
+```
+Luego ajustamos el modelo:
+
+```{r}
+fit_1d_v1 <- stan_glm(altura ~ log.peso, data = howell, seed=SEED, refresh = 0) #generamos el modelo lineal bayesiano
+summary(fit_1d_v1) #mostramos el resumen del modelo
 ```
 
+Después de calcular este modelo, observamos que el coeficiente del intercepto es negativo. Por ello, se decidió crear una nueva variable log.peso.centrado centrando log.peso alrededor de su media para generar una interpretación del modelo.
+
+```{r}
+howell<-howell %>%
+  mutate(log.peso.centrado = log.peso-mean(log.peso)) #creamos la variable log.peso.centrado centrando por la media
+
+head(howell) #imprimimos las primeras observaciones
+```
+
+Y volvemos a ajustar un modelo:
+
+```{r}
+fit_1d <- stan_glm(altura ~ log.peso.centrado, data = howell, seed=SEED, refresh = 0) #generamos el modelo lineal bayesiano
+summary(fit_1d) #mostramos el resumen del modelo
+```
+
+Ya que el signo del coeficiente es positivo, nos quedaremos con esta versión para compararla con el del inciso a). Es decir, utilizamos los criterios de información de los modelos para medir la capacidad predictiva del modelo del inciso a) y d) por medio de la devianza y log-densidad haciendo uso de validación cruzada con los métodos de waic y loo.
+
+Primero calculamos la devianza de ambos modelos con waic:
+
+```{r}
+waic_1a<-waic(fit_1a) #calcula: elpd_waic que corresponde a la log-densidad; p_waic: el número efectivo de parámetros; waic: la devianza del modelo así como suss errores estándar variando sobre todas las observaciones
+waic_1d<-waic(fit_1d) #calcula: elpd_waic que corresponde a la log-densidad; p_waic: el número efectivo de parámetros; waic: la devianza del modelo así como suss errores estándar variando sobre todas las observaciones
+
+comparativo_waic_1d<-cbind(waic_1a,waic_1d) #combina resultados para comparar
+comparativo_waic_1d
+```
+
+Y los resultados arrojan que el modelo es el d) que incorpora el peso en escala logarítmica como predictor tiene un mejor desempeño ya que es el de menor devianza 3,330 en contraste con el del inciso a) 3,982.
+
+Luego generamos un comparativo en términos de la log-densidad predictiva con el método loo_compare().
+
+```{r}
+comparativo_diff_waic_1d<-loo_compare(waic_1a,waic_1d) #calcula comparativo de diferencia en términos de la log-densidad predictiva y un error estándar sobre esta diferencia (se_diff). Ordenando los modelos del mejor al peor
+comparativo_diff_waic_1d #imprime comparativo
+```
+
+Estos resultados también identifican al modelo del inciso d como el mejor pues tiene una mayor log-densidad predictiva. Además se aprecia una diferencia relativamente grande en la log-densidad predictiva y el error estándar del modelo d) con respecto al del inciso a).
+
+Por último comparamos los modelos con validación cruzada mediante la función loo():
+
+```{r}
+loo_1a<-loo(fit_1a) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1a #imprime resultados 
+```
+
+```{r}
+loo_1d<-loo(fit_1d) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1d #imprime resultados 
+```
+En ambos casos, el diagnóstico que loo arroja es que ambos modelos son buenos y además notamos que las estadísticas coinciden con las obtenidas con el método waic. Por lo que la conclusión no cambia, el mejor modelo también se determina que el modelo del inciso d) es el mejor bajo esta comparación.
+
+```{r}
+comparativo_diff_loo_1d<-loo_compare(loo_1a,loo_1d) #calcula comparativo de diferencia en términos de la log-densidad predictiva y un error estándar sobre esta diferencia (se_diff). Ordenando los modelos del mejor al peor
+comparativo_diff_loo_1d #imprime comparativo
+```
 
 e) ¿Cómo interpretas los coeficientes del mejor modelo del inciso `d`?
 
-```{r}
+### Respuesta:
 
+Como ya mencionamos, el mejor modelo para la predicción de la variable altura fue el d: altura ~ log.peso.centrado, donde utilizamos la variable log(peso) que fue centrada alrededor de su media. Primero mostramos los coeficientes de este modelo:
+
+```{r}
+print(fit_1d) #imprimimos el objeto con el modelo
 ```
 
+De lo anterior se interpreta al intercepto de 138.3 como la estimación para la altura promedio en centímetros de un individuo promedio con un log.peso.centrado promedio (log-kg). El valor del coeficiente $\beta_1$ para la variable log.peso.centrado de 47.1 significa que un incremento de una unidad en la variable log.peso.centrado aumenta 47.1 cm la predicción sobre la altura del individuo.
 
 f) Ahora estudiaremos el efecto de la distribución previa. Para esto
 consideraremos. La variable de `edad` centrada y probaremos distintos polinomios
 como predictores. Consideraremos potencias desde 0 hasta términos de grado 6.
-Ajusta esta colección de posibles modelos.
+Ajusta esta colección de posibles modelos. 
+
+### Respuesta:
+
+Primero calculamos la variable edad.centrada centrando la variable edad alrededor de su media:
 
 ```{r}
-poly(edad.centrado,2,raw=TRUE)
+howell.centrado<-datos1 %>% 
+  mutate(edad.centrada = edad-mean(edad)) #creamos la variable edad.centrada centrando la variable edad por su media
+howell.centrado$genero<-factor(howell$genero) #convertimos la variable a factor
+head(howell.centrado) #imprimimos las primeras observaciones
 ```
 
+Luego ajustamos 7 modelos para la altura usando como predictores a la edad.centrada en forma de polinomios desde el grado 0 a 6.
+
+```{r}
+#generamos los modelos lineales bayesianos para la altura incorporando como predictor un polinomio grado cero hasta 6 con la edad.centrada
+fit_1f_g0 <- stan_glm(altura ~ 1, data = howell.centrado, seed=SEED, refresh = 0)
+fit_1f_g1 <- stan_glm(altura ~ poly(edad.centrada,1,raw=TRUE), data = howell.centrado, seed=SEED, refresh = 0)
+fit_1f_g2 <- stan_glm(altura ~ poly(edad.centrada,2,raw=TRUE), data = howell.centrado, seed=SEED, refresh = 0)
+fit_1f_g3 <- stan_glm(altura ~ poly(edad.centrada,3,raw=TRUE), data = howell.centrado, seed=SEED, refresh = 0)
+fit_1f_g4 <- stan_glm(altura ~ poly(edad.centrada,4,raw=TRUE), data = howell.centrado, seed=SEED, refresh = 0)
+fit_1f_g5 <- stan_glm(altura ~ poly(edad.centrada,5,raw=TRUE), data = howell.centrado, seed=SEED, refresh = 0)
+fit_1f_g6 <- stan_glm(altura ~ poly(edad.centrada,6,raw=TRUE), data = howell.centrado, seed=SEED, refresh = 0)
+```
+
+Y a continuación mostramos el resumen de cada modelo:
+
+```{r}
+summary(fit_1f_g0) #mostramos el resumen del modelo
+```
+
+```{r}
+summary(fit_1f_g1) #mostramos el resumen del modelo
+```
+
+```{r}
+summary(fit_1f_g2) #mostramos el resumen del modelo
+```
+
+```{r}
+summary(fit_1f_g3) #mostramos el resumen del modelo
+```
+
+```{r}
+summary(fit_1f_g4) #mostramos el resumen del modelo
+```
+
+```{r}
+summary(fit_1f_g5) #mostramos el resumen del modelo
+```
+
+```{r}
+summary(fit_1f_g6) #mostramos el resumen del modelo
+```
 
 g) Para cada modelo en el inciso de arriba, genera gráficos que muestren las
-predicciones junto con las bandas de predicción.
+predicciones junto con las bandas de predicción. 
 
+### Respuesta:
 
+Creamos las predicciones y gráficos con bandas de predicción considerando un intervalo del 89% a partir de funciones
+
+```{r}
+#función para calcular las predicciones de la posterior de los modelos para la altura (media y bandas del 89%)
+df4plot<-function(model){
+  edad.centrada<-tibble(seq(-40,70))
+  colnames(edad.centrada)<-"edad.centrada"
+  df<-as_tibble(posterior_predict(model, newdata=edad.centrada,seed=SEED)) %>%  #calculamos las predicciones con la posterior
+  #cada fila es una simulación bajo una muestra distinta
+  mutate(sample_id = 1:4000) %>% #creamos ID para cada
+  pivot_longer(cols = 1:nrow(edad.centrada)) %>%
+  mutate(name = fct_inorder(name)) %>% 
+  group_by(name) %>% #name es la predicción de cada individuo (1-5)
+  summarise(altura_mean=mean(value), #calcula media
+            altura_median=median(value), #calcula mediana
+            altura_low=quantile(value,.055), #intervalos del 89% de probabilidad
+            altura_hi=quantile(value,.945))
+df$edad.centrada<-as_vector(edad.centrada)
+return(df)
+}
+
+#función que genera gráfico de predicciones para un modelo
+plots<-function(df,points,title){
+  g_points <-geom_point(data= points, aes(edad.centrada,altura),alpha=.1)
+  g_1a<-df %>%
+    ggplot(aes(edad.centrada,altura_mean)) + #graficamos peso vs altura_prom
+    geom_ribbon(aes(ymin=altura_low,ymax=altura_hi),fill = "grey70",alpha=.3)+ #bandas de predicción
+    geom_line(color="red") + #media de predicciones
+    ggtitle(title)+
+    ylab("altura")
+  
+  g_1a+g_points
+}
+```
+
+```{r}
+#guardamos predicciones
+post_predict_1f_g0 <- df4plot(fit_1f_g0) 
+post_predict_1f_g1 <- df4plot(fit_1f_g1)
+post_predict_1f_g2 <- df4plot(fit_1f_g2)
+post_predict_1f_g3 <- df4plot(fit_1f_g3)
+post_predict_1f_g4 <- df4plot(fit_1f_g4)
+post_predict_1f_g5 <- df4plot(fit_1f_g5)
+post_predict_1f_g6 <- df4plot(fit_1f_g6)
+
+#guardamos gráficos
+g_g0<-plots(post_predict_1f_g0,howell.centrado,"Predicciones con polinomio grado 0 (I. 89%)")
+g_g1<-plots(post_predict_1f_g1,howell.centrado,"Predicciones con polinomio grado 1 (I. 89%)")
+g_g2<-plots(post_predict_1f_g2,howell.centrado,"Predicciones con polinomio grado 2 (I. 89%)")
+g_g3<-plots(post_predict_1f_g3,howell.centrado,"Predicciones con polinomio grado 3 (I. 89%)")
+g_g4<-plots(post_predict_1f_g4,howell.centrado,"Predicciones con polinomio grado 4 (I. 89%)")
+g_g5<-plots(post_predict_1f_g5,howell.centrado,"Predicciones con polinomio grado 5 (I. 89%)")
+g_g6<-plots(post_predict_1f_g6,howell.centrado,"Predicciones con polinomio grado 6 (I. 89%)")
+```
+
+Y presentamos los gráficos de cada modelo:
+
+```{r}
+g_g0 #muestra gráfica
+```
+
+```{r}
+g_g1 #muestra gráfica
+```
+```{r}
+g_g2 #muestra gráfica
+```
+
+```{r}
+g_g3 #muestra gráfica
+```
+
+```{r}
+g_g4 #muestra gráfica
+```
+
+```{r}
+g_g5 #muestra gráfica
+```
+
+```{r}
+g_g6 #muestra gráfica
+```
 
 h) Realiza una evaluación de los modelos resultantes con el criterio de
 información que consideres más apropiado.
 
+### Respuesta:
 
+Para la evaluación de modelos nos basaremos en el criterio de información de loo ya que como vimos en el inciso d, el método loo() nos genera un diagnóstico del modelo y utiliza validación cruzada para evaluar su capacidad predictiva. A su vez, para una conclusión tomaremos en cuenta el principio de parsimonia en el que se prefiere el modelo más sencillo posible.
+
+A continuación presentamos los diagnósticos:
+
+```{r}
+loo_1g_g0<-loo(fit_1f_g0) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1g_g0  #imprime resultados
+```
+```{r}
+loo_1g_g1<-loo(fit_1f_g1) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1g_g1  #imprime resultados
+```
+```{r}
+loo_1g_g2<-loo(fit_1f_g2) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1g_g2  #imprime resultados
+```
+
+```{r}
+loo_1g_g3<-loo(fit_1f_g3) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1g_g3  #imprime resultados
+```
+
+```{r}
+loo_1g_g4<-loo(fit_1f_g4) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1g_g4  #imprime resultados
+```
+
+```{r}
+loo_1g_g5<-loo(fit_1f_g5) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1g_g5  #imprime resultados
+```
+
+```{r}
+loo_1g_g6<-loo(fit_1f_g6) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1g_g6  #imprime resultados
+```
+
+El diagnóstico de todos los modelos que loo arrojó es que son buenos: "All Pareto k estimates are good (k < 0.5)." sólo con excepción del que utiliza un polinomio grado 6 en términos la edad.centrada como predictores pues en este caso indica ok: "All Pareto k estimates are ok (k < 0.7).". A continuación mostramos un resumen de los estadísticos de todos los modelos con loo:
+
+```{r}
+comparativo_loo_1g<-cbind(loo_1g_g0,loo_1g_g1,loo_1g_g2,loo_1g_g3,loo_1g_g4,loo_1g_g5,loo_1g_g6) #guarda comparativo
+comparativo_loo_1g #imprime comparativo de modelos
+```
+
+En términos de la devianza (looic) los modelos que utilizan como predictores a los polinomios de grado 4 a 6 tienen la mejor capacidad predictiva ya que tienen una menor devianza respecto al resto de los modelos. Además, notamos que el error estándar de looic es de 33 aproximadamente en estos mismos modelos, por lo que no podríamos dar una conclusión definitiva sobre cuál de estos 3 predictores es el mejor con este criterio.
+
+Para complementar el análisis, procederemos a obtener un comparativo en términos de la log-densidad predictiva con el método loo_compare().
+
+```{r}
+comparativo_diff_loo_1g<-loo_compare(loo_1g_g0,loo_1g_g1,loo_1g_g2,loo_1g_g3,loo_1g_g4,loo_1g_g5,loo_1g_g6) #calcula comparativo de diferencia en términos de la log-densidad predictiva y un error estándar sobre esta diferencia (se_diff). Ordenando los modelos del mejor al peor
+comparativo_diff_loo_1g  #imprime comparativo de modelos
+```
+
+Si bien estos resultados colocan en primer posición al modelo con el polinomio de grado 6 (mejor modelo), los modelos con polinomios de grado 4 y 5 como predictores tienen una log-densidad predictiva muy similar, además dado el error estándar de la diferencia que tienen es posible que para nuevas simulaciones de la posterior el  modelo 5 o 4 sea el mejor si usamos otra semilla. A continuación presentamos ejercicios donde validamos esto ():
+
+```{r}
+#volvemos a correr los modelos con otra senilla
+fit_1f_g0_v2 <- stan_glm(altura ~ 1, data = howell.centrado, seed=SEED, refresh = 0)
+loo_1f_g0_v2<-loo(fit_1f_g0_v2)
+fit_1f_g1_v2 <- stan_glm(altura ~ poly(edad.centrada,1,raw=TRUE), data = howell.centrado, seed=SEED+1, refresh = 0)
+loo_1f_g1_v2<-loo(fit_1f_g1_v2)
+fit_1f_g2_v2 <- stan_glm(altura ~ poly(edad.centrada,2,raw=TRUE), data = howell.centrado, seed=SEED+1, refresh = 0)
+loo_1f_g2_v2<-loo(fit_1f_g2_v2)
+fit_1f_g3_v2 <- stan_glm(altura ~ poly(edad.centrada,3,raw=TRUE), data = howell.centrado, seed=SEED+1, refresh = 0)
+loo_1f_g3_v2<-loo(fit_1f_g3_v2)
+fit_1f_g4_v2 <- stan_glm(altura ~ poly(edad.centrada,4,raw=TRUE), data = howell.centrado, seed=SEED+1, refresh = 0)
+loo_1f_g4_v2<-loo(fit_1f_g4_v2)
+fit_1f_g5_v2 <- stan_glm(altura ~ poly(edad.centrada,5,raw=TRUE), data = howell.centrado, seed=SEED+1, refresh = 0)
+loo_1f_g5_v2<-loo(fit_1f_g5_v2)
+fit_1f_g6_v2 <- stan_glm(altura ~ poly(edad.centrada,6,raw=TRUE), data = howell.centrado, seed=SEED+1, refresh = 0)
+loo_1f_g6_v2<-loo(fit_1f_g6_v2)
+```
+
+```{r}
+comparativo_diff_loo_1g_v2<-loo_compare(loo_1f_g0_v2,loo_1f_g1_v2,loo_1f_g2_v2,loo_1f_g3_v2,loo_1f_g4_v2,loo_1f_g5_v2,loo_1f_g6_v2) #calcula comparativo de diferencia en términos de la log-densidad predictiva y un error estándar sobre esta diferencia (se_diff). Ordenando los modelos del mejor al peor
+comparativo_diff_loo_1g_v2 #imprime comparativo
+```
+
+En esta simulación, el modelo con polinomio grado 4 es el de mejor desempeño en relación a la log-densidad predictiva.
+
+```{r}
+#volvemos a correr los modelos con otra senilla
+fit_1f_g0_v3 <- stan_glm(altura ~ 1, data = howell.centrado, seed=SEED, refresh = 0)
+loo_1f_g0_v3<-loo(fit_1f_g0_v3)
+fit_1f_g1_v3 <- stan_glm(altura ~ poly(edad.centrada,1,raw=TRUE), data = howell.centrado, seed=SEED-12, refresh = 0)
+loo_1f_g1_v3<-loo(fit_1f_g1_v3)
+fit_1f_g2_v3 <- stan_glm(altura ~ poly(edad.centrada,2,raw=TRUE), data = howell.centrado, seed=SEED-12, refresh = 0)
+loo_1f_g2_v3<-loo(fit_1f_g2_v3)
+fit_1f_g3_v3 <- stan_glm(altura ~ poly(edad.centrada,3,raw=TRUE), data = howell.centrado, seed=SEED-12, refresh = 0)
+loo_1f_g3_v3<-loo(fit_1f_g3_v3)
+fit_1f_g4_v3 <- stan_glm(altura ~ poly(edad.centrada,4,raw=TRUE), data = howell.centrado, seed=SEED-12, refresh = 0)
+loo_1f_g4_v3<-loo(fit_1f_g4_v3)
+fit_1f_g5_v3 <- stan_glm(altura ~ poly(edad.centrada,5,raw=TRUE), data = howell.centrado, seed=SEED-12, refresh = 0)
+loo_1f_g5_v3<-loo(fit_1f_g5_v3)
+fit_1f_g6_v3 <- stan_glm(altura ~ poly(edad.centrada,6,raw=TRUE), data = howell.centrado, seed=SEED-12, refresh = 0)
+loo_1f_g6_v3<-loo(fit_1f_g6_v3)
+```
+
+```{r}
+comparativo_diff_loo_1g_v3<-loo_compare(loo_1f_g0_v3,loo_1f_g1_v3,loo_1f_g2_v3,loo_1f_g3_v3,loo_1f_g4_v3,loo_1f_g5_v3,loo_1f_g6_v3) #calcula comparativo de diferencia en términos de la log-densidad predictiva y un error estándar sobre esta diferencia (se_diff). Ordenando los modelos del mejor al peor
+comparativo_diff_loo_1g_v3
+```
+
+De lo anterior, concluimos que la capacidad predictiva de los modelos con polinomios grado 4, 5 y 6 no tiene una diferencia significativa y por tanto, escogemos como el mejor modelo al que incorpora como predictores a la edad.centrada como un polinomio de grado 4 por el principio de parsimonia.
 
 i) Ahora ajustaremos un polinomio de grado 6 pero incorporaremos distribuciones
 previas mas restrictivas. Es decir, considera que $\beta_k \sim \mathsf{N}(0,
-\sqrt{5})$ para toda $k.$ Nota que la desviación estandar es $\sqrt{5}.$ Evalúa
-el criterio de información que utlizaste en el inciso anterior, y compara la
+\sqrt{5})$ para toda $k.$ Nota que la desviación estándar es $\sqrt{5}.$ Evalúa
+el criterio de información que utilizaste en el inciso anterior, y compara la
 estimación de número efectivo de parámetros. ¿Por qué crees que sucede esto?
+
+### Respuesta:
+
+Primero calculamos el modelo con el polinomio grado 6 utilizando considerando que $\beta_k \sim \mathsf{N}(0,
+\sqrt{5})$ para toda $k.$ y el resto de los parámetros con su default.
+
+```{r}
+fit_1i_g6 <- stan_glm(altura ~ poly(edad.centrada,6,raw=TRUE), #generamos el modelo lineal bayesiano
+                      data = howell.centrado,
+                      prior=normal(0, sqrt(5), autoscale = FALSE), #distribución previa para beta k, k>0
+                      prior_intercept = normal(0, sqrt(5), autoscale = FALSE), #distribución previa para beta cero
+                      seed=SEED,
+                      refresh = 0)
+print(fit_1i_g6) #imprimimos el objeto con el modelo
+```
+
+E imprimimos la distribución previa de los coeficientes del modelo, para validar que tanto el intercepto como los coeficientes tienen una distribución normal ($\mathsf{N}(0, \sqrt{5})$
+
+```{r}
+prior_summary(fit_1i_g6) #imprimimos el resumen con las priors propuestas que usa stan_glm
+```
+
+Ahora presentamos el resumen con los resultados de este modelo:
+
+```{r}
+summary(fit_1i_g6) #mostramos el resumen del modelo
+```
+
+Notamos que en este caso el intercepto tiene la mayor influencia sobre la predicción ya que el valor del coeficiente es muy alto en comparativa con el resto de los predictores que tienen un coeficiente menor a 2 en valor absoluto.
+
+Graficamos para comparar cómo se ven las predicciones de la altura de ambos modelos bajo las observaciones de la muestra.
+
+```{r}
+post_predict_1i_g6 <- df4plot(fit_1i_g6) #guardamos las predicciones con el modelo grado 6 y las previas propuestas para Beta k
+
+#guardamos gráficos
+g_i_g6<-plots(post_predict_1i_g6,howell.centrado,"Predicciones con polinomio grado 6 v2 (I. 89%)")
+```
+
+```{r}
+ggarrange(g_g6,g_i_g6,ncol = 1)
+```
+Y vemos que el segundo modelo está generando predicciones para la altura fuera de lo natural para edades en los extremos de la muestra. Esto se debe al efecto de las distribuciones previas propuestas para los coeficientes $\beta_k$ no permiten generar un buen ajuste respecto a los datos observados.
+
+Posteriormente, realizamos el diagnóstico del modelo con el mismo criterio de información (usando el método loo):
+
+```{r}
+loo_1i_g6<-loo(fit_1i_g6) #calcula: elpd_loo que corresponde a la log-densidad; p_loo: el número efectivo de parámetros; looic: la devianza del modelo así como suss errores estándar (SE) variando sobre todas las observaciones con validación cruzada
+loo_1i_g6
+```
+
+En este caso, el diagnóstico arroja que el modelo es muy malo lo cual hace sentido con el gráfico que vimos arriba. Ahora procederemos a evaluar el criterio de información de loo que usamos en el inciso anterior generando un comparativo con los resultados de los modelos con polinomios de grado 6.
+
+```{r}
+comparativo_loo_1i<-cbind(loo_1g_g6,loo_1i_g6) #agrupa resultados loo
+comparativo_loo_1i #imprime comparativo
+```
+
+Identificamos que el desempeño del modelo con la distribución por default tiene la mejor capacidad predictiva, dado que su devianza (looic) es claramente menor que la del polinomio con las distribuciones propuestas. En términos de la estimación del número efectivo de parámetros (p_loo) vemos que el modelo con polinomios grado 6 y default califica con 7.5 términos efectivos mientras que el modelo con las distribuciones previas propuestas para los coeficientes beta tienen valores exageradamente grandes, esto sugeriría que para poder brindar un mejor ajuste se tendrían que incorporar más parámetros al modelo dado que la desviación están de los coeficientes actual $\sqrt{5})$ es demasiado chica para que los coeficientes de los polinomios puedan tener valores más adecuados para las predicciones.
+
+Por último sólo calculamos el comparativo de diferencia sobre la log-densidad predictiva.
+
+```{r}
+comparativo_diff_loo_1i<-loo_compare(loo_1g_g6,loo_1i_g6) #calcula comparativo de diferencia en términos de la log-densidad predictiva y un error estándar sobre esta diferencia (se_diff). Ordenando los modelos del mejor al peor
+comparativo_diff_loo_1i
+```
+
+Y observamos que la diferencia en términos de la log-densidad predictiva también es muy alta así como el error estándar asociado.
 
 
 
@@ -283,6 +720,7 @@ data_vinos
 
 
 ### Exploración inicial de los datos
+
 ```{r}
 #### Explorando predictores
 print("Nombres de los jueces en el set de datos: ")
@@ -481,29 +919,50 @@ jueces individuales y vinos individuales? ¿Notas algún patrón (puedes utiliza
 `mcmc_areas`)? ¿Qué jueces dieron las calificaciones más altas / más bajas? ¿Qué
 vinos fueron calificados como peores / mejores en promedio?
 
-
+**Con el fin de tener una mejor idea de la distribución _a priori_ que podríamos usar para nuestro modelo, optamos por ajustar un modelo lineal para poder tener más información de los posibles valores que podrían tomar los coeficientes**
 ```{r}
-
-## Ajuste de modelo
 m_2a <- stan_glm(score_c ~ judge + wine,
-                 prior=normal(0, 0.5),
                  data=data_vinos,
                  seed=SEED,
                  refresh = 0,
                )
-# summary(m_2a)
+
 print(m_2a)
 ```
-**Para este problema se optó por usar una distribución _a priori_ normal con media en 0 y desviación estándar 0.5**
+
+```{r}
+## Exploración de los coeficientes para definir distribución a priori.
+hist(m_1a$coefficients)
+MASS::fitdistr(m_1a$coefficients, "normal")
+```
+
+
+**Con base en los resultados de este modelo, optamos por usar como distribución _a priori_ una distribución normal con media en -0.01 y desviación estándar de 1.24**
+
+```{r}
+## Ajuste de modelo con distribución _a priori_ seleccionada.
+m_2a <- stan_glm(score_c ~ judge + wine,
+                 prior=normal(-0.1, 1.24),
+                 data=data_vinos,
+                 seed=SEED,
+                 refresh = 0,
+               )
+
+print(m_2a)
+```
 
 
 ```{r}
 mcmc_areas(m_2a)
 ```
-**Esta visualización nos permite ver la estimación de los intervalos posterior, con la cual podemos hacer las siguientes observaciones:**
-**1. Los jueces con una desviación positiva fueron menos estrictos al momento de dar una calificación que los juecs que muestran una desviación negativa. Por lo tanto, podemos observar que los jueces más estrictos fueron Jean-M Cardepat y Robert Hodgson.**
-**2. Similar al tema de los jueces, los vinos que tuvieron una desviación negativa fueron los más penalizados, mientras que los que mostraron una desviación positiva fueron los más reconocidos. A diferencia del tema de los jueces, vemos un comportamiento más consistente en los intervalos de los vinos.**
+**Esta visualización nos permite ver la estimación de los intervalos posterior de los coeficientes.**
+**El modelo toma como referencia al juez Daniele Meulder (FR) y al vino A1 para definir los coeficientes del resto de las variables ascoiadas al modelo.**
 
+**Tomando en consideración estos puntos, podemos hacer las siguientes observaciones:**
+**1. Los jueces con una desviación positiva fueron menos estrictos al momento de dar una calificación que los jueces que muestran una desviación negativa. Por lo tanto, podemos observar que los jueces más estrictos fueron Jean-M Cardepat y Robert Hodgson en comparación con la referencia que el modelo tomó.**
+**2. Similar al tema de los jueces, los vinos que tuvieron una desviación negativa fueron los más penalizados, mientras que los que mostraron una desviación positiva fueron los más reconocidos. A diferencia del tema de los jueces, vemos un comportamiento más consistente en los intervalos de los vinos. El único vino que mostró desempeño negativo acorde a la referencia tomada, fue el vino I2 (rojo americano).**
+
+**Es importante notar también que los intervalos mostrados en la gráfica se caracterizan por su amplitud y alineación, lo cual nos sugiere que hay una alta correlación entre las variables del modelo.**
 
 
 b) Ajusta con la previa _default_ en `stan_glm`. Después, ajusta de nuevo el
@@ -522,16 +981,9 @@ m_2b1 <- stan_glm(
   data=data_vinos
 )
 
-print(m_2b1)
-
 bR2_m_2b1 <- bayes_R2(m_2b1)
 
-mcmc_hist(
-  data.frame(bR2_m_2b1),
-  binwidth=0.01
-)  +
-  xlab('Bayesian R2 con previa _default_') +
-  geom_vline(xintercept=median(bR2_m_2b1))
+m_2b1
 ```
 
 
@@ -544,28 +996,42 @@ m_2b2 <- stan_glm(
   prior=hs()
 )
 
-print(m_2b2)
-
 bR2_m_2b2 <- bayes_R2(m_2b2)
 
-mcmc_hist(
+m_2b2
+```
+
+```{r}
+## Gráficas con los resultados
+g1 <- mcmc_hist(
+  data.frame(bR2_m_2b1),
+  binwidth=0.01
+)  +
+  xlab('Bayesian R2 con previa _default_') +
+  geom_vline(xintercept=median(bR2_m_2b1))
+
+g2 <- mcmc_hist(
   data.frame(bR2_m_2b2),
   binwidth=0.01
 )  +
   xlab('Bayesian R2 con distribución a priori regularizada') +
   geom_vline(xintercept=median(bR2_m_2b2))
+
+g1 + g2
 ```
 
-**Al copmarar la R^2-Bayesiana podemos observar que...**
+**Al copmarar la R^2-Bayesiana podemos observar que el modelo con una distribución a priori regularizada está cetrado en un valor que el modelo no regularizado. Esto nos hace sentido porque la regularización limita el ajuste al favorecer la simplicidad del modelo. En general, podemos esperar que un modelo regularizado tenga una R^2-Bayesiana más pequeña que un modelo no regularizado.**
 
 ```{r}
-waic_m_2b1 <- waic(m_2b1)
-waic_m_2b2 <- waic(m_2b2)
+## Criterios de información
+loo_m_2b1 <- loo(m_2b1)
+loo_m_2b2 <- loo(m_2b2)
 
-comp_waic <- cbind(waic_m_2b1, waic_m_2b2)
-comp_waic
+comp_loo <- cbind(loo_m_2b1, loo_m_2b2)
+comp_loo
 ```
-**Al observar los resultados de la prueba waic, pordemos notar que...**
+
+**El criterio loo sugiere que el modelo regularizado es preferible sobre el no regularizado porque el primero tiene un valor "elpd_loo" mayor y una desviación estándar menor. Sin embargo, notamos que no hay una diferencia suficientemente grande para que nos sirva como evidencia concluyente.**
 
 
 c) Ahora considera como predictores `flight`(el tipo de vino), `wine.amer` (de
@@ -577,22 +1043,18 @@ estas estimaciones con lo que observaste en el inciso `a`?
 ```{r}
 ## Ajuste de modelo
 m_2c <- stan_glm(score_c ~ flight + wine.amer + judge.amer,
-                 prior=normal(0, 0.5),
+                 prior=normal(-0.1, 1.24),
                  data=data_vinos,
                  seed=SEED,
                  refresh = 0,
                )
-# summary(m_2a)
+
 print(m_2c)
-```
-**Para este ejercicio, se optó por utilizar una distribución previa de ...**
 
-
-```{r}
 mcmc_areas(m_2c)
 ```
 
-**A partir de la gráfica de distribucioines posterior podemos observar lo siguiente:**
+**A partir de la gráfica de distribuciones posterior podemos observar lo siguiente:**
 **1. No hay una diferencia relevante en el score dado el tipo de vino (rojo o blanco).**
 **2. Los jueces americanos tienden a ser un poco menos estrictos que los no americanos.**
 **3. Los vinos americanos tienden a ser más peores calificados que los no americanos.**
@@ -606,33 +1068,33 @@ esta sección?
 ```{r}
 ## Ajuste de modelo
 m_2d <- stan_glm(score_c ~ flight + wine.amer + judge.amer + flight:wine.amer + flight:judge.amer + wine.amer:judge.amer,
-                 prior=normal(0, 0.5),
+                 prior=normal(-0.1, 1.24),
                  data=data_vinos,
                  seed=SEED,
                  refresh = 0,
                )
-# summary(m_2a)
+
 print(m_2d)
 
 mcmc_areas(m_2d)
 ```
 
-**A partir de esta última gráfica de distribuciones posteriores, podemos hacer las siguientes observaciones:**
-**1. **
+**Este modelo, el cual ya incorpora sinergias entre las variables, nos permite notar que la conjunción de la variable `flight` y `wine.amer` juega un rol importante en las predicciones del modelo, cosa que no aprovecharíamos en los modelos sin interacciones.**
+**Los resultados nos siguieren que los jueces americanos tienden a ser más generosos en sus calificaciones que los no americanos. Adicionalmente, también notamos que los vinos americanos tienden a ser más penalizados que los vinos no americanos.**
 
 
-### Datos:
+### Datos: 
 
 Utiliza los datos en `nettle.txt` para evaluar la hipótesis de que la diversidad
-lingüística es producto de la seguridad alimentaria. Los datos contienen mediciones para:
+lingüística es producto de la seguridad alimentaria. Los datos contienen mediciones para: 
 
 1) `country`: Nombre del país.
 2) `num.lang`: Número de lenguajes identificados en dicho país.
 3) `area`: Area medida en kilómetros cuadrados.
-4) `k.pop`: Población en miles.
-5) `num.stations`: Número de estaciones que proveen las siguientes.
+4) `k.pop`: Población en miles. 
+5) `num.stations`: Número de estaciones que proveen las siguientes. 
 6) `mean.growing.season`: Duración promedio de la temporada de cosecha, medida
-en meses.
+en meses. 
 7) `sd.growing.season`: Desviación estándar de la duración de la
 temporada de cosecha, medidad en meses.
 
@@ -644,7 +1106,7 @@ idiomas per cápita como resultado:
 
 ```{r, eval = FALSE}
 data <- read.delim("nettle.txt",sep = ";")
-data <- data %>%
+data <- data %>% 
     mutate(leng.per.cap = num.leng/k.pob)%>%
     mutate(log.leng.per.cap = log(leng.per.cap))%>%
     mutate(log.area = log(area))%>%
@@ -662,79 +1124,72 @@ los efectos principales de la temporada media de crecimiento
 (`mean.growing.season`) y la desviación de la temporada de crecimiento
 (`sd.growing.season`), así como su interacción.
 
-### Respuesta:
+### Respuesta: 
 
-Para este análisis, se busca explicar los efectos  principales de la temporada media de crecimiento
+Para este análisis, se busca explicar los efectos principales de la temporada media de crecimiento
 (`mean.growing.season`) y la desviación de la temporada de crecimiento
-(`sd.growing.season`), así como su interacción en el desarrollo de lenguajes en distintas poblaciones.
+(`sd.growing.season`), así como su interacción en el desarrollo de lenguajes en distintas poblaciones. 
 
+Primero comenzamos con un breve análisis exploratorio de diferentes variables para entender la relación entre ellas. 
 
-Primero comenzamos con un breve analisis exploratiori ode diferentes variabes para entender la relación entre ellas.
+Análisis Exploratorio 
 
-Analisis Exploratiorio
 ```{r,eval = FALSE}
-library(psych)
 pairs.panels(data[,3:11],
             method = "pearson", # correlation method
              hist.col = "#00AFBB",
              density = TRUE,  # show density plots
              ellipses = TRUE # show correlation ellipses
              )
-boxplot(data$mean.growing.season)
-boxplot(data$sd.growing.season)
-boxplot(data$log.leng.per.cap)
-
-
+boxplot(data$mean.growing.season, main = "mean.growing.season")
+boxplot(data$sd.growing.season, main = "sd.growing.season")
+boxplot(data$log.leng.per.cap, main = "log.leng.per.cap" )
 ```
-Depués comenzamos a desarrollar diferentes modelos que expliquen nuestra variable independiente "log.leng.per.cap". La estrategia es la siguiente, crear un modelo base que contenga `mean.growing.season`,`sd.growing.season`, su interacción y `log.area`. Además, se agregarán a este modelo base otras variables que se encuentran dentro de la base de datos que son `log.k.pop` y `num.stations`. El objetivo es crear diferentes modelos, evaluar su capacidad predictiva por medio de WAIC/LOO y seleccionar el mejor.
 
+Depués comenzamos a desarrollar diferentes modelos que expliquen nuestra variable independiente "log.leng.per.cap". La estrategia es la siguiente: crear un modelo base que contenga `mean.growing.season`,`sd.growing.season`, su interacción y `log.area`. Además, se agregarán a este modelo base otras variables que se encuentran dentro de la base de datos que son `log.k.pop` y `num.stations`. El objetivo es crear diferentes modelos, evaluar su capacidad predictiva por medio de WAIC/LOO y seleccionar el mejor. 
 
-
+En este caso, las variables `mean.growing.season` y `sd.growing.season` son mayores o iguales a 0. 
 
 ```{r,eval = FALSE}
+###Baseline Model: Only  Mean, SD, Interaction, Area
+model1 <- stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area, 
+                  data = data,
+                  prior_intercept = default_prior_intercept("normal"),
+                  prior = default_prior_coef("normal"),
+                  seed = 108727, refresh = 0)
+###Model 2 : Baseline Model + numstations k.pop 
+model2 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+num.stations+log.k.pop, 
+                  data = data,
+                  prior_intercept = default_prior_intercept("normal"),
+                  prior = default_prior_coef("normal"),
+                  seed = 108727, refresh = 0)
+###Model 3 : Baseline Model + numstations  
+model3 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+num.stations, 
+                  data = data,
+                  prior_intercept = default_prior_intercept("normal"),
+                  prior = default_prior_coef("normal"),
+                  seed = 108727, refresh = 0)
 
-###Basline Model: Only  Mean, SD, Interaction, Area
-model1 <- stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area,
-                  data = data,
-                  prior_intercept = default_prior_intercept("normal"),
-                  prior = default_prior_coef("normal"),
-                  seed = 108727, refresh = 0)
-###Model 2 : Baseline Model + numstations k.pop
-model2 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+num.stations+log.k.pop,
-                  data = data,
-                  prior_intercept = default_prior_intercept("normal"),
-                  prior = default_prior_coef("normal"),
-                  seed = 108727, refresh = 0)
-###Model 3 : Baseline Model + numstations
-model3 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+num.stations,
-                  data = data,
-                  prior_intercept = default_prior_intercept("normal"),
-                  prior = default_prior_coef("normal"),
-                  seed = 108727, refresh = 0)
-
-###Model 4 : Baseline Model + kpop
-model4 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+log.k.pop,
+###Model 4 : Baseline Model + kpop  
+model4 <-stan_glm(log.leng.per.cap~mean.growing.season+sd.growing.season+mean.growing.season*sd.growing.season+log.area+log.k.pop, 
                   data = data,
                  prior_intercept = default_prior_intercept("normal"),
                   prior = default_prior_coef("normal"),
                   seed = 108727, refresh = 0)
-
-
 ```
 
 ```{r,eval = FALSE}
-print(model1)
-print(model2)
-print(model3)
-print(model4)
-
+summary(model1)
+summary(model2)
+summary(model3)
+summary(model4)
 ```
+
 ```{r,eval = FALSE}
 loo1<-loo(model1)
 loo2<-loo(model2)
 loo3<-loo(model3)
 loo4<-loo(model4)
-
 
 waic1<-waic(model1)
 waic2<-waic(model2)
@@ -744,63 +1199,48 @@ waic4<-waic(model4)
 loo_compare(loo1,loo2,loo3,loo4)
 loo_compare(waic1,waic2,waic3,waic4)
 ```
+
 Además de crear estos modelos, relizamos unas transformaciones a las variables `mean.growing.season`,`sd.growing.season` para centrarlas en su media. Con esto obtenemos las nuevas variables `centered.mean.growing.season`,`centered.sd.growing.season`. En este caso, la interpretación de los coeficientes es un poco distinta.
 
-
-En este caso, las variables `mean.growing.season` y `sd.growing.season` son mayores o iguales a 0.
-
-
 ```{r,eval=FALSE}
-
 data_centered = data %>%
               mutate(centered.mean.growing.season= mean.growing.season - mean(mean.growing.season))%>%
               mutate(centered.sd.growing.season= sd.growing.season - mean(sd.growing.season))
 
 ###Basline Model: Only  Mean, SD, Interaction, Area
-model_centered_1 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area,
+model_centered_1 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area, 
                               data = data_centered,
                               prior_intercept = default_prior_intercept("normal"),
                              prior = default_prior_coef("normal"),
                               seed = 108727, refresh = 0)
 
 ### Model centered 2: Basline + numstatiosn + logpop
-model_centered_2 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+num.stations+log.k.pop,
+model_centered_2 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+num.stations+log.k.pop, 
                               data = data_centered,
                               prior_intercept = default_prior_intercept("normal"),
                              prior = default_prior_coef("normal"),
                               seed = 108727, refresh = 0)
 
-### Model centered 3: Basline + numstatiosn
-model_centered_3 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+num.stations,
+### Model centered 3: Basline + numstatiosn 
+model_centered_3 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+num.stations, 
                               data = data_centered,
                               prior_intercept = default_prior_intercept("normal"),
                              prior = default_prior_coef("normal"),
                               seed = 108727, refresh = 0)
 
 ### Model centered 4: Basline  + logpop
-model_centered_4 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+log.k.pop,
+model_centered_4 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+centered.mean.growing.season*centered.sd.growing.season+log.area+log.k.pop, 
                               data = data_centered,
                               prior_intercept = default_prior_intercept("normal"),
                              prior = default_prior_coef("normal"),
                               seed = 108727, refresh = 0)
-
-### Model centered 4: Basline  + logpop + noncentered interactions
-#model_centered_5 <- stan_glm(log.leng.per.cap~centered.mean.growing.season+centered.sd.growing.season+mean.growing.season*s#d.growing.season+log.area+log.k.pop,
-#                              data = data_centered,
-#                              prior_intercept = default_prior_intercept("normal"),
-#                              prior = default_prior_coef("normal"),
-#                              prior_aux = NULL,
-#                              seed = 108727, refresh = 0)
 ```
 
 ```{r,eval = FALSE}
-print(model_centered_1)
-print(model_centered_2)
-print(model_centered_3)
-print(model_centered_4)
-#print(model_centered_5)
-
-
+summary(model_centered_1)
+summary(model_centered_2)
+summary(model_centered_3)
+summary(model_centered_4)
 ```
 
 ```{r,eval = FALSE}
@@ -816,7 +1256,6 @@ waic3_centered<-waic(model_centered_3)
 waic4_centered<-waic(model_centered_4)
 #waic5_centered<-waic(model_centered_5)
 
-
 loo_compare(loo1_centered,loo2_centered,loo3_centered,loo4_centered)
 loo_compare(waic1_centered,waic2_centered,waic3_centered,waic4_centered)
 ```
@@ -827,30 +1266,62 @@ loo_compare(loo1,loo2,loo3,loo4,loo1_centered,loo2_centered,loo3_centered,loo4_c
 loo_compare(waic1,waic2,waic3,waic4,waic1_centered,waic2_centered,waic3_centered,waic4_centered)
 ```
 
+```{r,eval = FALSE}
+print(loo4)
+print(loo4_centered)
+print(waic4)
+print(waic4_centered)
+```
+
+En conclusión, tenemos que el mejor modelo es el `model_centered_4` por un pequeño margen utilizando el criterio de loo como indicador. Tenemos que este modelo es el que tiene mayor log-densidad predictiva. Además, el hecho de que contenga variables centradas, no afecta la interpretación de los coeficientes en cuanto a que ayuda a responder las hipótesis planteadas más adelante. Hay un punto importante a resaltar, el valor de 0 tanto en   `mean.growing.season` y  `sd.growing.season` sí tienen una interpretación, es decir que no tienen temporada de crecimiento y que no existe variabilidad en ella. Sin embargo, al estudiar los datos, esto sólo se presenta en dos observaciones y es un valor poco frecuente. Dado que los datos incluyen únicamente países ubicados dentro de los trópicos, se decidió usar el modelo con variables centradas ya que se prefiere interpretar los coeficientes como el cambio en la diversidad linguística con respecto a la desviación de la duración de la temporada promedio o la variabilidad promedio. En otras palabras, no nos importa tanto el valor de la temporada de crecimiento (o variabilidad) en sí, sino que más larga o corta es con respecto a los demás. Además, se está controlando por la interacción entre ambas variables. 
+
+El modelo resultante es el siguiente:
+
+$$\hat{y}= \hat\beta_0 + \hat\beta_1(x_1-\bar x_1)+\hat\beta_2(x_2-\bar x_2) + \hat\beta_3(x_1-\bar x_1)*(x_2-\bar x_2)+\hat\beta_4 x_4+\hat\beta_5 x_5$$
+
+
+Con $x_1 = $ temporada de crecimiento y x_2 = $ variabilidad en temporada de crecimiento.
+
+Por lo tanto, ante un cambio en $x_1$ $\hat y $ cambia en $\hat\beta_1+\hat\beta_3*(x_2-\bar x_2)$ unidades y ante un cambio en $x_2$ $\hat y $ cambia en $\hat\beta_2+\hat\beta_3*(x_1-\bar x_1)$ unidades.
+
+Dado que $y$ es una transformación logarítmica de la variable de lenguajes per capita, si buscamos predecir esta variable es necesario hacer la siguiente transformacion del modelo: 
+
+Si z es lenguajes per capita
+$$ y = \ln(z) $$
+$$y= \beta_0 + \beta_1(x_1-\bar x_1)+\beta_2(x_2-\bar x_2) + \beta_3(x_1-\bar x_1)*(x_2-\bar x_2)+\beta_4 x_4+\beta_5 x_5 +\epsilon$$
+Se obtiene que:
+
+$$z= e^{\beta_0 + \beta_1(x_1-\bar x_1)+\beta_2(x_2-\bar x_2) + \beta_3(x_1-\bar x_1)*(x_2-\bar x_2)+\beta_4 x_4+\beta_5 x_5 +\epsilon}$$
+Como el modelo solo busca probar ciertas hipótesis y no predecir, no es necesario realizar esta transformación. 
+
 a) Evalúe la hipótesis de que la diversidad lingüística, medida por
 `log(lang.per.cap)`, está asociada positivamente con la duración promedio de la
 temporada de crecimiento, `mean.growing.season`. Considera tambíen  `log(area)`
 en tu modelo (no como una interacción). Interpreten sus resultados.
-
+ 
+ La hipotesis de que la  diversidad lingüística, medida por
+`log(lang.per.cap)`, está asociada positivamente con la duración promedio de la
+temporada de crecimiento, `mean.growing.season` es correcta. En este modelo se observa que el coeficiente asociado a la 
+variable `centered.mean.growing.season` es positivo. La interpretacion es que en pais, mientras mas dure la temporada de crecimiento relativo a los valores promedio, mayor sera la diversidad linguistica. Esto quiere decir que mientras más larga sea la temprorada de crecimiento mayor será la diversidad linguística. Además observamos que la distribucion posterior del coeficiente asociado a la variable `centered.mean.growing.season` será positivo con un 90% de probabilidad ya que su intervalo de confianza va de 0.089 a 0.239.
 
 ```{r, eval = FALSE}
-
-ggplot(data = data_centered, aes(x = centered.mean.growing.season, y = log.leng.per.cap))  +
-    geom_abline(data = as_tibble(model_centered_4) %>% sample_frac(.2),
-                aes(slope = centered.mean.growing.season, intercept = `(Intercept)`),
-                color = 'grey', alpha = .4) +
-    geom_abline(slope = coef(model_centered_4)[2], intercept = coef(model_centered_4)[1], color = 'salmon') +
+ggplot(data = data_centered, aes(x = centered.mean.growing.season, y = log.leng.per.cap))  + 
+    geom_abline(data = as_tibble(model_centered_4) %>% sample_frac(.2), 
+                aes(slope = centered.mean.growing.season, intercept = `(Intercept)`), 
+                color = 'grey', alpha = .4) + 
+    geom_abline(slope = coef(model_centered_4)[2], intercept = coef(model_centered_4)[1], color = 'salmon') + 
     geom_point()
 
 posterior_vs_prior(model_centered_4,pars= c("centered.mean.growing.season"))
 
-as_tibble(model_centered_4)%>%
-    ggplot(aes(x = centered.mean.growing.season)) +
-        geom_histogram() +
-        geom_vline(xintercept = coef(model_centered_4)[2], lty = 2) +
+as_tibble(model_centered_4)%>% 
+    ggplot(aes(x = centered.mean.growing.season)) + 
+        geom_histogram() + 
+        geom_vline(xintercept = coef(model_centered_4)[2], lty = 2) + 
         xlab("Valor del Coeficiente")+
         ggtitle("Distribución posterior del Coeficiente")
 ```
+
 ```{r, eval = FALSE}
 posterior_interval(model_centered_4,pars= c("centered.mean.growing.season"))
 ```
@@ -866,21 +1337,27 @@ tanto, menos idiomas. Nuevamente, considere `log(area)` como una covariable (no
 una interacción). Interpreten sus resultados.
 
 
+ La hipotesis de que la diversidad lingüística está asociada
+negativamente con la desviación estándar de la duración de la temporada de
+crecimiento no puede confirmarse. . En este modelo se observa que el coeficiente asociado a la 
+variable `centered.sd.growing.season` es negativo La interpretacion es que en pais, mientras mas variación la temporada de crecimiento relativo a los valores de variación promedio, menor sera la diversidad linguistica. Esto quiere decir que mientras más variabilidad haya en la temporada de crecimiento menor será la diversidad linguística. Además observamos que con la distribucion posterior del coeficiente asociado a la variable `centered.sd.growing.season` no puede confirmarse que tenga valores siempre negativos. El intervalo de confianza asociado es de -0.367 a 0.0902 con un 90% de certeza. 
+
+
 ```{r, eval = FALSE}
 
-ggplot(data = data_centered, aes(x = sd.growing.season, y = log.leng.per.cap))  +
-    geom_abline(data = as_tibble(model1) %>% sample_frac(.2),
-                aes(slope = sd.growing.season, intercept = `(Intercept)`),
-                color = 'grey', alpha = .4) +
-    geom_abline(slope = coef(model1)[3], intercept = coef(model1)[1], color = 'salmon') +
+ggplot(data = data_centered, aes(x = centered.sd.growing.season, y = log.leng.per.cap))  + 
+    geom_abline(data = as_tibble(model_centered_1) %>% sample_frac(.2), 
+                aes(slope = centered.sd.growing.season, intercept = `(Intercept)`), 
+                color = 'grey', alpha = .4) + 
+    geom_abline(slope = coef(model_centered_1)[3], intercept = coef(model_centered_1)[1], color = 'salmon') + 
     geom_point()
 
-posterior_vs_prior(model1,pars= c("sd.growing.season"))
+posterior_vs_prior(model_centered_1,pars= c("centered.sd.growing.season"))
 
-as_tibble(model1)%>%
-    ggplot(aes(x = sd.growing.season)) +
-        geom_histogram() +
-        geom_vline(xintercept = coef(model1)[3], lty = 2) +
+as_tibble(model_centered_1)%>% 
+    ggplot(aes(x = centered.sd.growing.season)) + 
+        geom_histogram() + 
+        geom_vline(xintercept = coef(model_centered_1)[3], lty = 2) + 
         xlab("Valor del Coeficiente")+
         ggtitle("Distribución posterior del Coeficiente")
 ```
@@ -896,3 +1373,28 @@ largas, la alta variación hace que el almacenamiento y la redistribución sean
 aún más importantes de lo que serían de otra manera. De esa manera, las personas
 pueden cooperar para preservar y proteger las ganancias inesperadas que se
 utilizarán durante las sequías.
+
+Por último, se analiza la interacción entre la duración y la variabilidad de la temprada de crecimiento. La hipótesis sugiere que cuando ambas son muy largas o muy cortas relativas al promedio, la diversidad linguística se reduce. En este caso, de acuerdo con nuestro modelo, la hipótesis sí puede confirmarse. De acuerdo con la distribución posterior de los parámetros, el intervalo de confianza con 90% de certeza se encuentra entre -0.1261 y -0.0097. Estos intervalos confirman la relación negativa entre la interacción de `mean.growing.season` y `sd.growing.season` en la diversidad linguística.
+
+```{r, eval = FALSE}
+ggplot(data = data_centered, aes(x = centered.sd.growing.season*centered.mean.growing.season, y = log.leng.per.cap))  + 
+    geom_abline(data = as_tibble(model_centered_4) %>% sample_frac(.2), 
+                aes(slope = centered.sd.growing.season*centered.mean.growing.season, intercept = `(Intercept)`), 
+                color = 'grey', alpha = .4) + 
+    geom_abline(slope = coef(model_centered_4)[6], intercept = coef(model_centered_4)[1], color = 'salmon') + 
+    geom_point()
+
+posterior_vs_prior(model_centered_4,pars= c("centered.mean.growing.season:centered.sd.growing.season"))
+
+as_tibble(model_centered_4)%>% 
+    ggplot(aes(x = `centered.mean.growing.season:centered.sd.growing.season`)) + 
+        geom_histogram() + 
+        geom_vline(xintercept = coef(model_centered_4)[6], lty = 2) + 
+        xlab("Valor del Coeficiente")+
+        ggtitle("Distribución posterior del Coeficiente")
+
+```
+
+```{r, eval = FALSE}
+posterior_interval(model_centered_4,pars= c("centered.mean.growing.season:centered.sd.growing.season"))
+```
